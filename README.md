@@ -39,3 +39,7 @@ Limits: times are naive local times in one time zone (`America/Phoenix`). The ve
 No AWS keys live on the box (instance role), no SSH keys exist, and the token is never in the repo or the instance user-data. State is SQLite in `/opt/planbot/data` on the instance disk.
 
 Demo walkthrough for the video: [DEMO_FLOW.md](DEMO_FLOW.md).
+
+## Website
+
+Static landing page in `website/` (open `website/index.html`). Video slot is marked in the HTML.

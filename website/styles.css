@@ -1,0 +1,144 @@
+:root {
+  --asphalt: oklch(0.17 0.014 170);
+  --asphalt-2: oklch(0.21 0.016 170);
+  --sign: oklch(0.40 0.105 160);
+  --sign-deep: oklch(0.34 0.09 160);
+  --paper: oklch(0.975 0.004 160);
+  --on-sign: oklch(0.93 0.025 160);
+  --muted: oklch(0.76 0.025 170);
+  --caution: oklch(0.87 0.17 95);
+  --caution-ink: oklch(0.2 0.03 95);
+  --gutter: clamp(16px, 5vw, 56px);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--asphalt);
+  color: var(--paper);
+  font-family: "Overpass", "Helvetica Neue", Arial, sans-serif;
+  font-size: 1.125rem;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--caution); color: var(--caution-ink); }
+:focus-visible { outline: 3px solid var(--caution); outline-offset: 3px; }
+a { color: inherit; }
+
+/* lane line: the page's centre stripe */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0; bottom: 0; left: calc(var(--gutter) / 2 - 2px);
+  width: 4px;
+  background: repeating-linear-gradient(to bottom, oklch(0.9 0.02 95 / 0.55) 0 28px, transparent 28px 56px);
+  pointer-events: none;
+}
+
+.wrap { width: min(1120px, 100% - var(--gutter) * 2); margin-inline: auto; }
+section { padding-block: clamp(56px, 9vw, 112px); }
+
+/* the sign panel: green sheeting, white inset border */
+.sign {
+  position: relative;
+  background: var(--sign);
+  color: var(--paper);
+  border-radius: 14px;
+  padding: clamp(22px, 3.5vw, 40px);
+  box-shadow: 0 0 0 6px var(--paper) inset, 0 18px 40px oklch(0 0 0 / 0.45);
+  overflow: hidden;
+}
+.sign::after { /* reflective sheen, one pass on entry */
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(105deg, transparent 35%, oklch(1 0 0 / 0.16) 50%, transparent 65%);
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+.sign > * { position: relative; }
+.sign p { color: var(--on-sign); max-width: 52ch; margin: 0; }
+
+h1, h2, h3 { font-weight: 900; line-height: 1.02; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(2.5rem, 7.2vw, 5.5rem); }
+h2 { font-size: clamp(2rem, 4.6vw, 3.5rem); }
+h3 { font-size: clamp(1.4rem, 2.4vw, 1.9rem); letter-spacing: 0; }
+
+/* hero */
+.hero { padding-top: clamp(32px, 6vw, 72px); }
+.brand { display: flex; align-items: center; justify-content: space-between; margin-bottom: clamp(28px, 5vw, 56px); font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; font-size: 1rem; }
+.brand a { font-weight: 700; letter-spacing: 0.02em; text-transform: none; text-decoration: none; color: var(--muted); }
+.brand a:hover { color: var(--paper); }
+.hero .sign { padding: clamp(28px, 5vw, 64px); }
+.hero .sign p { margin-top: 22px; font-size: clamp(1.1rem, 1.7vw, 1.35rem); }
+.exits { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 20px; }
+.exits .sign { padding: 14px 22px; display: flex; align-items: center; gap: 14px; font-weight: 900; font-size: 1.35rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.exits svg { width: 28px; height: 28px; flex: none; }
+.exits small { font-weight: 700; font-size: 0.8rem; letter-spacing: 0.08em; opacity: 0.85; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 32px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  min-height: 52px; padding: 12px 26px;
+  border-radius: 10px;
+  font: 900 1.05rem/1 "Overpass", Arial, sans-serif; letter-spacing: 0.04em; text-transform: uppercase; text-decoration: none;
+  transition: transform 160ms var(--ease), box-shadow 160ms var(--ease);
+}
+.btn:hover { transform: translateY(-2px); }
+.btn:active { transform: translateY(0); }
+.btn-go { background: var(--caution); color: var(--caution-ink); box-shadow: 0 0 0 3px var(--caution-ink) inset, 0 8px 18px oklch(0 0 0 / 0.4); }
+.btn-ghost { background: transparent; color: var(--paper); box-shadow: 0 0 0 3px var(--paper) inset; }
+.btn-ghost:hover { background: oklch(1 0 0 / 0.08); }
+.btn svg { width: 20px; height: 20px; }
+
+/* video slot */
+.video h2 { margin-bottom: 28px; }
+.frame { aspect-ratio: 16 / 9; width: 100%; border-radius: 14px; background: var(--asphalt-2); box-shadow: 0 0 0 3px var(--paper) inset; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--muted); overflow: hidden; }
+.frame iframe, .frame video { width: 100%; height: 100%; border: 0; }
+.frame strong { display: block; color: var(--paper); font-size: 1.5rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* how it works: exits down the road */
+.how h2 { margin-bottom: clamp(32px, 5vw, 56px); }
+.route { list-style: none; margin: 0; padding: 0; display: grid; gap: clamp(28px, 4vw, 44px); }
+.route li { display: grid; grid-template-columns: minmax(0, 1fr); }
+.route li:nth-child(even) { justify-items: end; }
+.route .sign { width: min(100%, 720px); padding-top: clamp(34px, 4vw, 44px); }
+.tab { position: absolute; top: 0; left: 24px; background: var(--paper); color: var(--sign-deep); font-weight: 900; font-size: 0.85rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 14px 4px; border-radius: 0 0 8px 8px; }
+.route h3 { margin-bottom: 10px; }
+.route .say { margin-top: 14px; padding: 10px 14px; background: var(--sign-deep); border-radius: 8px; font-weight: 700; color: var(--paper); max-width: 52ch; }
+
+/* limits */
+.limits .sign { background: var(--asphalt-2); box-shadow: 0 0 0 6px var(--caution) inset, 0 18px 40px oklch(0 0 0 / 0.45); }
+.limits h2 { margin-bottom: 24px; }
+.limits ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 14px; }
+.limits li { font-size: clamp(1.15rem, 2vw, 1.5rem); font-weight: 700; padding-left: 34px; position: relative; max-width: 60ch; }
+.limits li::before { content: ""; position: absolute; left: 0; top: 0.5em; width: 18px; height: 18px; background: var(--caution); transform: rotate(45deg) scale(0.75); }
+.limits li span { color: var(--muted); font-weight: 400; }
+
+/* close */
+.close .sign { text-align: left; padding: clamp(32px, 6vw, 80px); }
+.close h2 { font-size: clamp(2.4rem, 6.4vw, 4.75rem); }
+.close p { margin-top: 18px; font-size: clamp(1.1rem, 1.7vw, 1.3rem); }
+footer { padding: 0 0 56px; color: var(--muted); font-size: 0.95rem; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 28px; justify-content: space-between; border-top: 1px dashed oklch(0.9 0.02 95 / 0.3); padding-top: 24px; }
+
+/* motion: one authored moment, only where supported, content visible by default */
+@media (prefers-reduced-motion: no-preference) {
+  .sign::after { animation: sheen 1.4s var(--ease) 0.2s 1 both; }
+  @supports (animation-timeline: view()) {
+    .route .sign::after { animation: sheen linear both; animation-timeline: view(); animation-range: entry 10% cover 40%; }
+    .route .sign { animation: rise linear both; animation-timeline: view(); animation-range: entry 0% entry 55%; }
+  }
+}
+@keyframes sheen { to { transform: translateX(120%); } }
+@keyframes rise { from { opacity: 0.35; transform: translateY(28px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 640px) {
+  body { font-size: 1.05rem; }
+  .route li:nth-child(even) { justify-items: stretch; }
+  .btn { width: 100%; justify-content: center; }
+  .exits .sign { flex: 1 1 100%; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .btn { transition: none; } }

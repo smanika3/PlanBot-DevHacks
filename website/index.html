@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PlanBot</title>
+<meta name="description" content="PlanBot is a Discord bot that turns one casual message into a locked, booked group plan.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23126b43'/%3E%3Cpath d='M8 17l8-9 8 9h-5v7h-6v-7z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;700;900&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="wrap hero">
+  <div class="brand"><span>PlanBot</span><a href="https://github.com/smanika3/PlanBot-DevHacks">Source on GitHub</a></div>
+  <div class="sign">
+    <h1>Group plans die in “idk, whenever.”</h1>
+    <p>PlanBot lives in your Discord channel. One casual message becomes a locked, booked plan: times, food needs and real venues sorted, with nobody doing the chasing.</p>
+    <div class="actions">
+      <a class="btn btn-go" href="https://discord.com/oauth2/authorize?client_id=1563776953037627452&amp;permissions=93184&amp;scope=bot%20applications.commands">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        Add to Discord
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/smanika3/PlanBot-DevHacks">View the code</a>
+    </div>
+  </div>
+  <div class="exits" aria-label="Example plan">
+    <div class="sign"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="square" aria-hidden="true"><path d="M14 25V5M5 13l9-9 9 9"/></svg><span>Golf <small>Sat 1:00pm</small></span></div>
+    <div class="sign"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="square" aria-hidden="true"><path d="M5 14h18M15 5l9 9-9 9"/></svg><span>Dinner <small>after golf</small></span></div>
+  </div>
+</header>
+
+<main>
+  <section class="video" id="video">
+    <div class="wrap">
+      <h2>Watch it run.</h2>
+      <!-- Replace the contents of .frame with the embed, e.g. <iframe src="…" allowfullscreen title="PlanBot demo"></iframe> -->
+      <div class="frame"><div><strong>Demo video coming soon</strong>One message in, one booked plan out.</div></div>
+    </div>
+  </section>
+
+  <section class="how" id="how">
+    <div class="wrap">
+      <h2>From one message to a booked plan.</h2>
+      <ol class="route">
+        <li><div class="sign"><span class="tab">Exit 1</span>
+          <h3>Someone says it out loud</h3>
+          <p>PlanBot spots the plan and pins one card that edits itself. Each activity gets its own “I’m in” button.</p>
+          <div class="say">free this weekend, wanna golf? then dinner after</div></div></li>
+        <li><div class="sign"><span class="tab">Exit 2</span>
+          <h3>Friends opt in, per activity</h3>
+          <p>Join golf, dinner or both. Planning starts once the organizer and one more person are in.</p></div></li>
+        <li><div class="sign"><span class="tab">Exit 3</span>
+          <h3>Availability, in plain chat</h3>
+          <p>No calendar access. The bot repeats back what it understood so nobody is misread, then ranks times and checks real Tempe venues, with opening hours read live.</p>
+          <div class="say">free Saturday 9am to 6pm, budget under $$$</div></div></li>
+        <li><div class="sign"><span class="tab">Exit 4</span>
+          <h3>Needs stay private</h3>
+          <p>Diet goes by DM. The card shows “Dietary: vegetarian”, never who. A hard need narrows dinner to venues whose own site confirms it.</p></div></li>
+        <li><div class="sign"><span class="tab">Exit 5</span>
+          <h3>Clashes go to the group</h3>
+          <p>When a time conflicts, that person is marked tentatively out. The group chooses: go without them, or find a time for everyone. It never says why someone is busy.</p></div></li>
+        <li><div class="sign"><span class="tab">Exit 6</span>
+          <h3>Vote, then lock</h3>
+          <p>Approve every option you can do. Ties get one re-vote, then the organizer decides. Each activity locks once everyone in it has voted.</p></div></li>
+        <li><div class="sign"><span class="tab">Exit 7</span>
+          <h3>One person books</h3>
+          <p>PlanBot never books or pays. A volunteer gets the venue, link, time and party size by DM, and confirms when it is done.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="limits" id="limits">
+    <div class="wrap">
+      <div class="sign">
+        <h2>What it will not do.</h2>
+        <ul>
+          <li>Make up opening hours. <span>If it cannot confirm them, the option says “hours unverified”.</span></li>
+          <li>Reveal who needs what. <span>The group sees needs, not names, and never a reason for “busy”.</span></li>
+          <li>Book or pay for anyone. <span>A human always confirms the booking.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="close" id="start">
+    <div class="wrap">
+      <div class="sign">
+        <h2>Next exit: your server.</h2>
+        <p>Add PlanBot to a Discord server, say what you want to do, and let it handle the rest. Or read how it works, line by line.</p>
+        <div class="actions">
+          <a class="btn btn-go" href="https://discord.com/oauth2/authorize?client_id=1563776953037627452&amp;permissions=93184&amp;scope=bot%20applications.commands">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            Add to Discord
+          </a>
+          <a class="btn btn-ghost" href="https://github.com/smanika3/PlanBot-DevHacks">View the code</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Built for Cubbie Hackathon, Track 3.</span>
+    <span>Python, discord.py, Amazon Bedrock (Claude Haiku), one EC2 box.</span>
+  </div>
+</footer>
+
+</body>
+</html>
