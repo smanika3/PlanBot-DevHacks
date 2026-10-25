@@ -44,6 +44,9 @@ def init(path=None):
 
 
 def _person(pid, name):
+    """Upsert. A name another person already uses gets a short id suffix, so labels stay unique per person."""
+    if con.execute("SELECT 1 FROM persons WHERE name=? AND id!=?", (name, pid)).fetchone():
+        name = f"{name} ({str(pid)[-4:]})"
     con.execute("INSERT INTO persons(id,name) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name", (pid, name))
 
 
@@ -70,6 +73,8 @@ def open_event(channel_id):
 
 
 def cancel(event_id):
+    import polls
+    polls.cancel_open(event_id=event_id)
     con.execute("UPDATE events SET status='cancelled' WHERE id=?", (event_id,))
     con.commit()
 
@@ -79,6 +84,8 @@ def set_segments(event_id, kinds, organizer_id):
     cur = {r["kind"]: r["id"] for r in con.execute("SELECT id, kind FROM segments WHERE event_id=?", (event_id,))}
     for kind, sid in cur.items():
         if kind not in kinds:
+            import polls
+            polls.cancel_open(segment_id=sid)
             for t in ("options", "votes", "locks", "tiebreak"):
                 con.execute(f"DELETE FROM {t} WHERE segment_id=?", (sid,))
             con.execute("DELETE FROM participation WHERE segment_id=?", (sid,))

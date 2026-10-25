@@ -130,7 +130,8 @@ class VoteButton(discord.ui.DynamicItem[discord.ui.Button], template=r"vote:(?P<
         elif (o := _current(self.sid, self.ord, self.h)) is None or (
                 seg["tiebreak"] and db.option_key(o) not in seg["tiebreak"]["keys"]):
             await _stale(i, eid)
-        elif i.user.id not in db.segment_participants(self.sid):
+        elif i.user.id not in db.segment_participants(self.sid) and not (
+                self.prefix == "pick" and i.user.id == snap["proposer_id"]):  # the organizer may break a tie from outside
             await i.response.send_message("You're not in this activity, tap I'm in first.", ephemeral=True)
         else:
             await self.act(i, eid, seg, db.option_key(o))
@@ -181,7 +182,8 @@ class PlanBot(discord.Client):
     def __init__(self):
         intents = discord.Intents.default()
         intents.message_content = True
-        super().__init__(intents=intents)
+        # no pings by default: names from chat can't trigger @everyone or user mentions; send sites opt in explicitly
+        super().__init__(intents=intents, allowed_mentions=discord.AllowedMentions.none())
         self.guild_id = int(os.environ["DISCORD_GUILD_ID"])
         self.channel_id = int(os.environ["DISCORD_CHANNEL_ID"])
         self.venues = venue.load()

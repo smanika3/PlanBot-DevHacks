@@ -44,7 +44,8 @@ async def handle_press(i: discord.Interaction, pid: int, choice: str):
         await i.response.send_message("This vote is closed.", ephemeral=True)
     elif choice == "back":
         if polls.restore(pid, uid, client.schedule_recompute):
-            await i.response.edit_message(content=f"{polls.name_of(uid)} can make it, so the vote is cancelled.", view=None)
+            await i.response.edit_message(content=f"{polls.name_of(uid)} can make it, so the vote is cancelled.", view=None,
+                                                  allowed_mentions=discord.AllowedMentions.none())
         else:
             await i.response.send_message("Only the person this is about can press that.", ephemeral=True)
     elif polls.cast(pid, uid, choice):
@@ -76,11 +77,12 @@ async def finalize(client, pid: int, winner: str):
         return
     try:
         if p["message_id"]:
-            await (await ch.fetch_message(p["message_id"])).edit(content=line, view=None)
+            await (await ch.fetch_message(p["message_id"])).edit(content=line, view=None,
+                                                                                allowed_mentions=discord.AllowedMentions.none())
         else:
-            await ch.send(line)
+            await ch.send(line, allowed_mentions=discord.AllowedMentions.none())
         if more:
-            await ch.send(more)
+            await ch.send(more, allowed_mentions=discord.AllowedMentions.none())
     except discord.HTTPException:
         logging.warning("could not post poll outcome")
 

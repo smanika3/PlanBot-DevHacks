@@ -30,8 +30,12 @@ def parse_intent(out: str):
         return None
     if j.get("plan") is not True:
         return None
-    segs = [s.strip().lower() for s in j.get("segments", []) if isinstance(s, str) and s.strip()][:3]
-    return segs or ["hangout"]
+    segs = []
+    for s in j.get("segments", []):
+        for k in (parse_kinds(s) or []) if isinstance(s, str) else []:  # same rules as /edit; invalid ones are dropped
+            if k not in segs:
+                segs.append(k)
+    return segs[:3] or ["hangout"]
 
 
 def detect(text: str):
@@ -85,6 +89,9 @@ def option_line(letter: str, o: dict) -> str:
 
 def render_segment(s: dict) -> str:
     value = ", ".join(s["in"]) or "nobody yet"
+    if len(value) > 200:  # shorten the names, never the options below
+        head = value[:200].rsplit(", ", 1)[0]
+        value = f"{head} +{len(s['in']) - head.count(', ') - 1} more"
     if s.get("locked"):
         return value + f"\n🔒 **Locked:** {_core(s['locked'])}"
     if s["options"]:
@@ -98,6 +105,10 @@ def render_segment(s: dict) -> str:
         value += "\n" + "\n".join(option_line("ABC"[j], o) for j, o in enumerate(s["options"]))
         value += "\n*Provisional, not locked.*"
     return value
+
+
+def _cap(text: str, n: int) -> str:
+    return text if len(text) <= n else text[:n - 1] + "…"
 
 
 def render(snap: dict, status: dict = None) -> discord.Embed:
@@ -115,7 +126,7 @@ def render(snap: dict, status: dict = None) -> discord.Embed:
     if c.get("area"):
         needs.append(f"Area: {c['area'][0]} ({'required' if c['area'][1] else 'preferred'})")
     if needs:
-        e.add_field(name="Group needs", value="\n".join(needs), inline=False)
+        e.add_field(name="Group needs", value=_cap("\n".join(needs), 1024), inline=False)
     if status:
         e.add_field(name="Agents", value="\n".join(f"**{k}:** {v}" for k, v in status.items())[:1020], inline=False)
     if has_options:
@@ -164,14 +175,14 @@ def parse_listen(out: str):
         j = None
     if not isinstance(j, dict):
         return None
-    diet = [d.strip().lower() for d in j.get("diet") or [] if isinstance(d, str) and d.strip()]
+    diet = [d.strip().lower()[:40] for d in j.get("diet") or [] if isinstance(d, str) and d.strip()][:8]
     budget = j.get("budget")
     area = j.get("area")
     p = {
         "free": _windows(j.get("free")), "busy": _windows(j.get("busy")),
         "diet": diet, "diet_hard": j.get("diet_hard") is True,
         "budget": budget if isinstance(budget, int) and 1 <= budget <= 4 else None,
-        "area": area.strip() if isinstance(area, str) and area.strip() else None,
+        "area": area.strip()[:60] if isinstance(area, str) and area.strip() else None,
         "area_hard": j.get("area_hard") is True,
         "segments": [(s["kind"].strip().lower(), s["status"]) for s in j.get("segments") or []
                      if isinstance(s, dict) and isinstance(s.get("kind"), str) and s.get("status") in ("in", "out")],

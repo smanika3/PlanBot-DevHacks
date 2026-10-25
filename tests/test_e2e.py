@@ -318,8 +318,6 @@ def _opt(start, vid, blocked=()):
 
 # ---- confirmed bugs (strict xfail: they flip to failures once fixed, so remove the marker then) ----------------
 
-@pytest.mark.xfail(strict=True, reason="BUG: tentative_out shrinks the electorate but nobody calls settle(); if everyone "
-                                       "left already voted the segment never locks until someone re-votes")
 def test_bug_conflict_tentative_out_completes_vote():
     eid = db.create_event(1, ANN, "Ann", ["golf"])
     (golf,) = segs(eid)
@@ -335,7 +333,6 @@ def test_bug_conflict_tentative_out_completes_vote():
     assert db.snapshot(eid)["segments"][0]["status"] == "locked"  # everyone left has voted
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: 'go without them' removes the person but never settles, same stuck vote")
 def test_bug_without_outcome_completes_vote():
     eid = db.create_event(1, ANN, "Ann", ["golf"])
     (golf,) = segs(eid)
@@ -352,8 +349,6 @@ def test_bug_without_outcome_completes_vote():
     assert db.snapshot(eid)["segments"][0]["status"] == "locked"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: VoteButton requires the clicker to be in the segment, so an organizer who "
-                                       "toggled out can never break a round-2 tie (permanent deadlock)")
 def test_bug_organizer_out_cannot_break_tie():
     eid = db.create_event(1, ANN, "Ann", ["golf"])
     (golf,) = segs(eid)
@@ -374,8 +369,6 @@ def test_bug_organizer_out_cannot_break_tie():
     assert db.locked(golf) is not None
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: /edit deleting a segment leaves its open poll behind; polls.render/finish then "
-                                       "crash on the missing segment (TypeError) and the poll message keeps live buttons")
 def test_bug_edit_removing_segment_orphans_poll():
     eid = db.create_event(1, ANN, "Ann", ["golf", "dinner"])
     golf, _ = segs(eid)
@@ -386,8 +379,6 @@ def test_bug_edit_removing_segment_orphans_poll():
     assert polls.get(pid)["status"] == "closed"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: people are keyed by display name in people_for_segment/blocked_by; two members "
-                                       "called the same collapse into one (one person's availability is lost)")
 def test_bug_duplicate_display_names_collapse():
     eid = db.create_event(1, ANN, "Ann", ["golf"])
     (golf,) = segs(eid)
@@ -395,8 +386,6 @@ def test_bug_duplicate_display_names_collapse():
     assert len(db.people_for_segment(golf)) == 3
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: finalize()/restore edits and follow-up sends carry user display names but no "
-                                       "allowed_mentions, so a name like '@everyone' or '<@id>' can ping")
 def test_bug_finalize_allowed_mentions():
     eid = db.create_event(1, ANN, "Ann", ["golf"])
     (golf,) = segs(eid)
@@ -411,8 +400,6 @@ def test_bug_finalize_allowed_mentions():
     assert named and all("allowed_mentions" in c[2] for c in named)
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: polls on a cancelled plan still accept votes / reschedule requests and apply "
-                                       "outcomes (no cancelled-event guard in cast/request_reschedule/handle_press)")
 def test_bug_poll_on_cancelled_event_still_open():
     eid = db.create_event(1, ANN, "Ann", ["golf"])
     (golf,) = segs(eid)
@@ -422,16 +409,12 @@ def test_bug_poll_on_cancelled_event_still_open():
     assert not polls.cast(pid, BO, "yes", 2.0)
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: plan.parse_intent does not validate segment names (parse_kinds does); an LLM "
-                                       "kind over ~70 chars makes the 'I'm in: <kind>' label exceed Discord's 80 and kickoff fails")
 def test_bug_intent_kind_unvalidated_breaks_card():
     kinds = plan.parse_intent(json.dumps({"plan": True, "segments": ["x" * 90]}))
     eid = db.create_event(1, ANN, "Ann", kinds)
     assert all(len(i.item.label) <= 80 for i in bot.card_view(db.snapshot(eid)).children)
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: 'Group needs' field is not capped at 1024 chars (area/diet text from the model is "
-                                       "unbounded); Discord rejects the edit so the card stops updating")
 def test_bug_group_needs_field_over_1024():
     eid = db.create_event(1, ANN, "Ann", ["golf"])
     db.toggle(segs(eid)[0], BO, "Bo")
@@ -440,8 +423,6 @@ def test_bug_group_needs_field_over_1024():
     assert all(len(f.value) <= 1024 for f in e.fields)
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: render() cuts a long segment field at 1020 chars from the end, so with many "
-                                       "participants the options and the Provisional label are silently dropped")
 def test_bug_many_participants_truncate_options():
     eid = db.create_event(1, ANN, "Ann", ["golf"])
     (golf,) = segs(eid)
@@ -466,3 +447,10 @@ def test_bug_golf_option_overlaps_locked_dinner():
     recompute(eid)
     g = db.options(golf)[0]
     assert datetime.fromisoformat(g["end"]) + schedule.TRAVEL <= datetime.fromisoformat(d["start"])
+
+
+def test_duplicate_names_get_stable_unique_labels():
+    eid = db.create_event(1, ANN, "Ann", ["golf"])
+    (golf,) = segs(eid)
+    db.toggle(golf, 21, "Sam"); db.toggle(golf, 22, "Sam"); db.toggle(golf, 22, "Sam"); db.toggle(golf, 22, "Sam")
+    assert sorted(db.people_for_segment(golf)) == ["Ann", "Sam", "Sam (22)"]

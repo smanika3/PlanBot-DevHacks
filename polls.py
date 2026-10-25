@@ -42,6 +42,9 @@ def _now(now):
 def open_poll(kind, event_id, segment_id, choices, electorate, opened_by, subject_id=None, now=None, ttl=None):
     """New poll id, or None if a conflict/reschedule poll is already open for this segment."""
     con = _con()
+    ev = con.execute("SELECT status FROM events WHERE id=?", (event_id,)).fetchone()
+    if not ev or ev["status"] == "cancelled":
+        return None
     if con.execute("SELECT 1 FROM polls WHERE segment_id=? AND status='open'", (segment_id,)).fetchone():
         return None
     now = _now(now)
@@ -53,6 +56,14 @@ def open_poll(kind, event_id, segment_id, choices, electorate, opened_by, subjec
          opened_by, now, now + ttl)).lastrowid
     con.commit()
     return pid
+
+
+def cancel_open(event_id=None, segment_id=None):
+    """Close open polls of a cancelled event or a removed segment (their buttons then answer 'closed')."""
+    con = _con()
+    con.execute("UPDATE polls SET status='closed', result='cancelled' WHERE status='open' AND (event_id=? OR segment_id=?)",
+                (event_id, segment_id))
+    con.commit()
 
 
 def get(poll_id) -> dict:
@@ -153,8 +164,10 @@ def name_of(person_id) -> str:
 
 
 def set_status(person_id, segment_id, status):
+    """Every participation change made by a poll goes through here; it can shrink the electorate, so re-settle."""
     _con().execute("INSERT OR REPLACE INTO participation VALUES(?,?,?)", (person_id, segment_id, status))
     _con().commit()
+    db.settle_event(db.event_of_segment(segment_id))
 
 
 def _in(segment_id) -> set:
@@ -213,6 +226,8 @@ def restore(poll_id, person_id, recompute) -> bool:
 
 def _later(segment_id):
     s = _seg(segment_id)
+    if s is None:
+        return []
     return _con().execute("SELECT * FROM segments WHERE event_id=? AND ord>? ORDER BY ord",
                           (s["event_id"], s["ord"])).fetchall()
 
@@ -288,7 +303,7 @@ def blocked_now(segment_id) -> list:
 def render(poll_id) -> str:
     """Open-poll text: live counts only, never who voted what."""
     p = get(poll_id)
-    kind = _seg(p["segment_id"])["kind"]
+    kind = (_seg(p["segment_id"]) or {"kind": "an activity that was removed"})["kind"]
     if p["kind"] == "conflict":
         opts = db.options(p["segment_id"])
         at = f" at {when(datetime.fromisoformat(opts[0]['start']))}" if opts else ""
@@ -305,7 +320,10 @@ def finish(poll_id, winner, recompute, now: datetime):
     """Apply a decided poll. Returns (outcome line for the poll message, follow-up message or None).
     recompute(event_id) is the client's schedule_recompute."""
     p = get(poll_id)
-    seg, kind = p["segment_id"], _seg(p["segment_id"])["kind"]
+    seg = p["segment_id"]
+    if _seg(seg) is None:  # the activity was removed by /edit while the poll was open
+        return "That vote was closed because the activity was removed.", None
+    kind = _seg(seg)["kind"]
     if p["kind"] == "conflict":
         who = name_of(p["subject_id"])
         if winner == "without":
