@@ -51,8 +51,17 @@ def set_card(event_id, message_id):
 
 
 def open_event(channel_id):
-    return con.execute("SELECT * FROM events WHERE channel_id=? AND status!='done' ORDER BY id DESC LIMIT 1",
-                       (channel_id,)).fetchone()
+    return con.execute("SELECT * FROM events WHERE channel_id=? AND status NOT IN ('done','cancelled') "
+                       "ORDER BY id DESC LIMIT 1", (channel_id,)).fetchone()
+
+
+def cancel(event_id):
+    con.execute("UPDATE events SET status='cancelled' WHERE id=?", (event_id,))
+    con.commit()
+
+
+def event_of_segment(segment_id):
+    return con.execute("SELECT event_id FROM segments WHERE id=?", (segment_id,)).fetchone()["event_id"]
 
 
 def toggle(segment_id, person_id, name) -> int:
@@ -82,7 +91,7 @@ def snapshot(event_id) -> dict:
     if planning and ev["status"] == "collecting":
         con.execute("UPDATE events SET status='planning' WHERE id=?", (event_id,))
         con.commit()
-    return {"id": event_id, "proposer_id": ev["proposer_id"], "segments": segs, "planning": planning,
+    return {"id": event_id, "proposer_id": ev["proposer_id"], "status": ev["status"], "segments": segs, "planning": planning,
             "n_in": n_in, "constraints": constraints(event_id)}
 
 
@@ -90,7 +99,7 @@ def event_for_person(person_id):
     """Open event this person is part of (used to route DMs)."""
     return con.execute(
         "SELECT DISTINCT e.* FROM events e JOIN segments s ON s.event_id=e.id "
-        "JOIN participation q ON q.segment_id=s.id WHERE q.person_id=? AND e.status!='done' "
+        "JOIN participation q ON q.segment_id=s.id WHERE q.person_id=? AND e.status NOT IN ('done','cancelled') "
         "ORDER BY e.id DESC LIMIT 1", (person_id,)).fetchone()
 
 

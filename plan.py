@@ -67,8 +67,8 @@ def render(snap: dict) -> discord.Embed:
 # Cheap gate: only messages that look like availability, diet, budget, area or in/out go to the model.
 LISTEN = re.compile(
     r"\b(free|busy|available|can'?t|cannot|after|before|tonight|tomorrow|weekend|mon|tue|wed|thu|fri|sat|sun|"
-    r"\d\s?(am|pm)|vegetarian|vegan|gluten|allerg|halal|kosher|pescatarian|dairy|nut|diet|budget|cheap|under \$?\d|"
-    r"\$|around|near|downtown|campus|area|in for|there for|skip|i'?m out|count me)\b", re.I)
+    r"\d\s?(am|pm)|budget|cheap|around|near|downtown|campus|area|in for|there for|skip|i'?m out|count me)"
+    r"|allerg|nut|vegan|vegetarian|gluten|halal|kosher|dairy|diet|pescatarian|shellfish|lactose|celiac|\$", re.I)
 LISTEN_SYSTEM = """Extract planning info from one chat message. Today is {today}. Times are local, no timezone.
 Reply with JSON only, using null or [] when absent:
 {"free": [{"start": "YYYY-MM-DDTHH:MM", "end": "YYYY-MM-DDTHH:MM"}], "busy": [same shape],
@@ -117,8 +117,8 @@ def parse_listen(out: str):
     return p if any(p[k] for k in ("free", "busy", "diet", "budget", "area", "segments")) else None
 
 
-def listen(text: str):
-    if not LISTEN.search(text):
+def listen(text: str, gated=True):
+    if gated and not LISTEN.search(text):  # DMs skip the gate: they are always meant for the bot
         return None
     today = datetime.now(ZoneInfo(os.environ.get("TZ_NAME", "America/Phoenix"))).strftime("%A %Y-%m-%d")
     system = LISTEN_SYSTEM.replace("{today}", today)

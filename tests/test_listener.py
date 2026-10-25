@@ -15,6 +15,22 @@ def test_parse_listen_validates():
     assert plan.parse_listen('{"free": [{"start": "bad", "end": "x"}], "budget": 9}') is None  # nothing valid
 
 
+def test_gate_catches_diet_and_money_wording():
+    for t in ["also no peanuts, allergic", "i'm allergic to shellfish", "keep it under $20", "I'm vegetarian",
+              "gluten-free please", "can't do saturday"]:
+        assert plan.LISTEN.search(t), t
+    assert not plan.LISTEN.search("lol that movie was great")
+
+
+def test_cancel_closes_event():
+    db.init(":memory:")
+    eid = db.create_event(1, 10, "Ann", ["golf"])
+    assert db.open_event(1) and db.event_for_person(10)
+    db.cancel(eid)
+    assert db.open_event(1) is None and db.event_for_person(10) is None
+    assert db.snapshot(eid)["status"] == "cancelled"
+
+
 def test_echo_never_puts_diet_in_public():
     pub, priv = plan.echo(plan.parse_listen(OUT))
     assert "vegetarian" not in pub.lower() and "vegetarian" in priv

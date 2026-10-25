@@ -3,6 +3,7 @@ import logging
 import os
 
 import discord
+from discord import app_commands
 
 import db
 import llm
@@ -20,6 +21,13 @@ def load_env(path=".env"):
 def should_ignore(author_is_bot: bool, guild_id, channel_id, allowed_guild, allowed_channel) -> bool:
     """Ignore bots (including ourselves), DMs, and anything outside the test guild/channel."""
     return author_is_bot or guild_id != allowed_guild or channel_id != allowed_channel
+
+
+HELP = """**PlanBot** turns "wanna golf this weekend, then dinner?" into a group plan.
+• Say what you'd like to do in this channel and I'll post a plan card. Tap **I'm in** per activity.
+• Tell me your availability, budget, area, or what you can't do, in chat or by DM.
+• Diet or allergies: DM me. The group only ever sees anonymous needs, never who has them.
+• `/status` links the current plan card · `/cancel` cancels it (organizer only) · `/help` shows this."""
 
 
 def card_view(snap: dict) -> discord.ui.View:
@@ -41,6 +49,9 @@ class SegButton(discord.ui.DynamicItem[discord.ui.Button], template=r"seg:(?P<si
         return cls(int(match["sid"]), (item.label or "").removeprefix("I'm in: "))
 
     async def callback(self, interaction: discord.Interaction):
+        if db.snapshot(db.event_of_segment(self.sid))["status"] == "cancelled":
+            await interaction.response.send_message("This plan was cancelled.", ephemeral=True)
+            return
         eid = db.toggle(self.sid, interaction.user.id, interaction.user.display_name)
         snap = db.snapshot(eid)
         await interaction.response.edit_message(embed=plan.render(snap), view=card_view(snap))
@@ -57,6 +68,35 @@ class PlanBot(discord.Client):
     async def setup_hook(self):
         db.init()
         self.add_dynamic_items(SegButton)
+        tree = app_commands.CommandTree(self)
+        guild = discord.Object(id=self.guild_id)
+
+        @tree.command(name="help", description="What PlanBot does and how to use it", guild=guild)
+        async def help_(i: discord.Interaction):
+            await i.response.send_message(HELP, ephemeral=True)
+
+        @tree.command(name="status", description="Link to this channel's current plan card", guild=guild)
+        async def status(i: discord.Interaction):
+            ev = db.open_event(i.channel_id)
+            if not ev:
+                await i.response.send_message("No open plan in this channel.", ephemeral=True)
+                return
+            url = f"https://discord.com/channels/{i.guild_id}/{ev['channel_id']}/{ev['card_message_id']}"
+            await i.response.send_message(f"Current plan: {url}", ephemeral=True)
+
+        @tree.command(name="cancel", description="Cancel the current plan (organizer only)", guild=guild)
+        async def cancel(i: discord.Interaction):
+            ev = db.open_event(i.channel_id)
+            if not ev:
+                await i.response.send_message("No open plan in this channel.", ephemeral=True)
+            elif i.user.id != ev["proposer_id"]:
+                await i.response.send_message(f"Only the organizer (<@{ev['proposer_id']}>) can cancel this plan.",
+                                              ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+            else:
+                await i.response.send_message(f"Plan cancelled by <@{i.user.id}>.")
+                await self.cancel_event(ev)
+
+        await tree.sync(guild=guild)  # guild commands show up instantly
 
     async def on_ready(self):
         logging.info("online as %s", self.user)
@@ -86,7 +126,7 @@ class PlanBot(discord.Client):
                 await self.kickoff(m, kinds)
 
     async def listen(self, m: discord.Message, event_id: int, private=False):
-        p = await asyncio.to_thread(plan.listen, m.content)
+        p = await asyncio.to_thread(plan.listen, m.content, not private)
         if not p:
             return
         db.apply(event_id, m.author.id, m.author.display_name, p)
@@ -102,6 +142,19 @@ class PlanBot(discord.Client):
                 await m.author.send(f"Noted privately: {priv}")
             except discord.Forbidden:
                 logging.info("DMs closed for a user; diet echo skipped")
+
+    async def cancel_event(self, ev):
+        db.cancel(ev["id"])
+        e = plan.render(db.snapshot(ev["id"]))
+        e.title = "Cancelled · " + e.title
+        e.colour = discord.Colour.dark_grey()
+        e.set_footer(text="Cancelled by the organizer")
+        try:
+            msg = await self.get_channel(ev["channel_id"]).fetch_message(ev["card_message_id"])
+            await msg.edit(embed=e, view=None)
+            await msg.unpin()
+        except discord.HTTPException:
+            logging.warning("could not update cancelled card")
 
     async def refresh_card(self, event_id: int):
         snap = db.snapshot(event_id)
