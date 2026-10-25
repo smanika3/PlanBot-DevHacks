@@ -13,7 +13,6 @@ Try `!ping` and `!llm` in the configured channel.
 See `.env.example`. Defaults: `LLM_PROVIDER=bedrock`, `TZ_NAME=America/Phoenix`, `DEMO_AREA=Tempe`.
 Locally Bedrock uses your AWS profile; on EC2 it uses the instance role (no keys on the box).
 
-Known bugs and things to recheck: see [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 ## How planning works (M3)
 - **Preferences** (`db.constraints`): aggregates diet, budget and area across people in the plan. Only anonymous needs leave it.
