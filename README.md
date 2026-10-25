@@ -29,3 +29,11 @@ Limits: times are naive local times in one time zone (`America/Phoenix`). The ve
 - A person blocked by the leading option goes tentatively out and the group votes: go without them, or find a time for everyone. `/reschedule` opens a yes/no poll (majority passes, organizer breaks ties) and reopens the activity.
 - After a lock, a "Who'll book?" button appears. The volunteer is DMed the details (aggregated dietary note, no names) and confirms; the group sees "Booked by X". The bot never books or pays.
 - Slash commands: `/help`, `/status`, `/edit`, `/cancel` (organizer), `/reschedule`.
+
+## Deploy (AWS, one small EC2 box)
+1. Stop any local copy of the bot (two copies with one token would both answer).
+2. In AWS CloudShell (region us-east-1), run `deploy/ec2-setup.sh`. It prompts for the Discord ids and token (hidden), stores them as one encrypted SSM parameter, creates a role that can only invoke Bedrock and read that parameter, a security group with no inbound rules, and one `t3.small` that builds and runs the Docker image from this repo.
+3. Watch it with Session Manager: `aws ssm start-session --target <instance id>` then `sudo docker logs -f planbot`.
+4. Remove everything with `deploy/ec2-teardown.sh`.
+
+No AWS keys live on the box (instance role), no SSH keys exist, and the token is never in the repo or the instance user-data. State is SQLite in `/opt/planbot/data` on the instance disk.
