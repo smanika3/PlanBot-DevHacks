@@ -3,15 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PlanBot</title>
-<meta name="description" content="PlanBot is a Discord bot that turns one casual message into a locked, booked group plan.">
+<title>PlanBot: one Discord message becomes a booked group plan</title>
+<meta name="description" content="PlanBot is a Discord bot that turns one casual message into a locked, booked group plan. It checks real venues, protects private needs and never books or pays.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="PlanBot: group plans die in “idk, whenever.”">
+<meta property="og:description" content="A Discord bot that turns one casual message into a locked, booked group plan.">
+<meta property="og:url" content="https://smanika3.github.io/PlanBot-DevHacks/">
+<meta property="og:image" content="https://smanika3.github.io/PlanBot-DevHacks/media/poster.jpg">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c6f432'/%3E%3Cpath d='M9 17l5 5 9-11' fill='none' stroke='%23202a05' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap">
 <link rel="stylesheet" href="styles.css">
 <script>document.documentElement.classList.add('js')</script>
-<noscript><style>.card [data-show]:not([data-final]){display:none!important}.cap,.msg{display:block!important;opacity:1!important}.caps{display:block!important}</style></noscript>
+<noscript><style>.card [data-show]:not([data-final]){display:none!important}.cap,.msg{display:block!important;opacity:1!important}.caps{display:block!important}.field,.dots{display:none!important}</style></noscript>
 </head>
 <body>
 
@@ -21,18 +27,28 @@
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></symbol>
 </svg>
 
-<header class="hero" id="top">
-  <div class="field" aria-hidden="true">
-    <span class="b" style="left:4%;top:16%;--r:-6deg;--dx:46vw;--dy:30vh"><i style="--c:var(--pb)">B</i>idk whenever</span>
-    <span class="b" style="left:62%;top:12%;--r:5deg;--dx:-12vw;--dy:34vh"><i style="--c:var(--pc)">C</i>maybe sat?</span>
-    <span class="b" style="left:78%;top:34%;--r:-4deg;--dx:-28vw;--dy:16vh"><i style="--c:var(--pa)">A</i>can’t do golf tho</span>
-    <span class="b" style="left:2%;top:46%;--r:4deg;--dx:48vw;--dy:4vh"><i style="--c:var(--pd)">D</i>$$ max</span>
-    <span class="b" style="left:70%;top:62%;--r:-7deg;--dx:-20vw;--dy:-12vh"><i style="--c:var(--pb)">B</i>is anyone vegetarian</span>
-    <span class="b" style="left:58%;top:76%;--r:6deg;--dx:42vw;--dy:-22vh"><i style="--c:var(--pc)">C</i>free after 6 maybe</span>
-    <span class="b" style="left:22%;top:80%;--r:-3deg;--dx:0vw;--dy:-34vh"><i style="--c:var(--pd)">D</i>lol who’s booking</span>
-    <span class="b" style="left:30%;top:6%;--r:3deg;--dx:16vw;--dy:40vh"><i style="--c:var(--pa)">A</i>whatever works</span>
+<div class="field" aria-hidden="true">
+  <span class="b" style="left:4%;top:13%;--r:-6deg"><i style="--c:var(--pb)">B</i>idk whenever</span>
+  <span class="b" style="left:62%;top:11%;--r:5deg"><i style="--c:var(--pc)">C</i>maybe sat?</span>
+  <span class="b" style="left:68%;top:30%;--r:-4deg"><i style="--c:var(--pa)">A</i>can’t do golf tho</span>
+  <span class="b" style="left:82%;top:50%;--r:4deg"><i style="--c:var(--pd)">D</i>$$ max</span>
+  <span class="b" style="left:60%;top:66%;--r:-7deg"><i style="--c:var(--pb)">B</i>is anyone vegetarian</span>
+  <span class="b" style="left:36%;top:86%;--r:6deg"><i style="--c:var(--pc)">C</i>free after 6 maybe</span>
+  <span class="b" style="left:5%;top:84%;--r:-3deg"><i style="--c:var(--pd)">D</i>lol who’s booking</span>
+  <span class="b" style="left:32%;top:7%;--r:3deg"><i style="--c:var(--pa)">A</i>whatever works</span>
+</div>
+
+<nav class="bar" aria-label="Site">
+  <a class="logo" href="#top">PlanBot</a>
+  <div class="bar-links">
+    <a class="hide-sm" href="#story">How it works</a>
+    <a class="hide-sm" href="#video">Video</a>
+    <a href="https://github.com/smanika3/PlanBot-DevHacks">Code</a>
+    <a class="btn btn-go btn-sm" href="https://discord.com/oauth2/authorize?client_id=1563776953037627452&amp;permissions=93184&amp;scope=bot%20applications.commands">Add to Discord</a>
   </div>
-  <nav class="wrap nav"><span class="logo">PlanBot</span><a href="https://github.com/smanika3/PlanBot-DevHacks">Source on GitHub</a></nav>
+</nav>
+
+<header class="hero" id="top">
   <div class="wrap hero-copy">
     <h1>Group plans die in “idk, whenever.”</h1>
     <p>PlanBot lives in your Discord channel. One casual message becomes a locked, booked plan: times, food needs and real venues sorted, with nobody doing the chasing.</p>
@@ -49,23 +65,24 @@
     <div class="stage">
       <div class="left">
         <div class="caps">
-          <div class="cap" data-show="0-0"><h2>Someone says it out loud.</h2><p>PlanBot spots the plan and pins one card that edits itself, with an “I’m in” button per activity.</p></div>
-          <div class="cap" data-show="1-1"><h2>Friends opt in, per activity.</h2><p>Join golf, dinner or both. Planning starts once the organizer and one more person are in.</p></div>
-          <div class="cap" data-show="2-2"><h2>Availability, in plain chat.</h2><p>No calendar access. The bot repeats back what it understood, then ranks times and checks real Tempe venues, with opening hours read live.</p></div>
-          <div class="cap" data-show="3-3"><h2>Needs stay private.</h2><p>Diet goes by DM. The card shows the need, never who. A hard need narrows dinner to venues whose own site confirms it.</p></div>
-          <div class="cap" data-show="4-4"><h2>Clashes go to the group.</h2><p>A conflicting time marks that person tentatively out. The group picks: go without them, or find a time for everyone. It never says why.</p></div>
-          <div class="cap" data-show="5-5"><h2>Vote, then lock.</h2><p>Approve every option you can do. Ties get one re-vote, then the organizer decides. Each activity locks once everyone in it has voted.</p></div>
-          <div class="cap" data-show="6-6" data-final><h2>One person books.</h2><p>PlanBot never books or pays. A volunteer gets the venue, link, time and party size by DM, and confirms when it is done.</p></div>
+          <div class="cap" data-show="0-0"><h2>Someone says it out loud.</h2><p>PlanBot spots the plan and pins one card that edits itself.</p></div>
+          <div class="cap" data-show="1-1"><h2>Friends opt in, per activity.</h2><p>Join golf, dinner or both.</p></div>
+          <div class="cap" data-show="2-2"><h2>Availability, in plain chat.</h2><p>No calendar access. It repeats back what it understood, then checks real venues and live hours.</p></div>
+          <div class="cap" data-show="3-3"><h2>Needs stay private.</h2><p>Diet goes by DM. The card shows the need, never who.</p></div>
+          <div class="cap" data-show="4-4"><h2>Clashes go to the group.</h2><p>Go without them, or find a time for everyone. It never says why.</p></div>
+          <div class="cap" data-show="5-5"><h2>Vote, then lock.</h2><p>Approve every option you can do. Ties get one re-vote.</p></div>
+          <div class="cap" data-show="6-6" data-final><h2>One person books.</h2><p>PlanBot never books or pays. A volunteer does, and confirms.</p></div>
         </div>
+        <p class="key">A organizes. B, C and D are friends.</p>
         <ol class="chat" aria-label="Example conversation">
-          <li class="msg" data-show="0-"><b style="--c:var(--pa)">A</b><span>free this weekend, wanna golf? then dinner after</span></li>
-          <li class="msg sys" data-show="1-"><span>B and C tapped “I’m in” for golf and dinner</span></li>
-          <li class="msg" data-show="2-"><b style="--c:var(--pa)">A</b><span>I’m free Saturday 8am to 8pm, around Tempe, budget under $$$</span></li>
-          <li class="msg bot" data-show="2-"><b>Bot</b><span>Understood: free sat 8:00am–8:00pm · budget $$$ · area Tempe (preferably). Reply to correct me.</span></li>
-          <li class="msg dm" data-show="3-"><b style="--c:var(--pb)">B</b><span><em>in a DM</em>I’m vegetarian and it has to be vegetarian friendly</span></li>
-          <li class="msg" data-show="4-"><b style="--c:var(--pd)">D</b><span>busy Saturday morning until 1pm</span></li>
-          <li class="msg sys" data-show="5-"><span>Everyone in golf voted. Dinner moves to after golf.</span></li>
-          <li class="msg" data-show="6-" data-final><b style="--c:var(--pb)">B</b><span>I’ll book it</span></li>
+          <li class="msg" data-show="0-1"><b style="--c:var(--pa)">A</b><span>free this weekend, wanna golf? then dinner after</span></li>
+          <li class="msg sys" data-show="1-2"><span>B and C tapped “I’m in” for golf and dinner</span></li>
+          <li class="msg" data-show="2-3"><b style="--c:var(--pa)">A</b><span>I’m free Saturday 8am to 8pm, around Tempe, budget under $$$</span></li>
+          <li class="msg bot" data-show="2-3"><b>Bot</b><span>Understood: free sat 8:00am–8:00pm · budget $$$ · area Tempe (preferably). Reply to correct me.</span></li>
+          <li class="msg dm" data-show="3-4"><b style="--c:var(--pb)">B</b><span><em>in a DM</em>I’m vegetarian and it has to be vegetarian friendly</span></li>
+          <li class="msg" data-show="4-5"><b style="--c:var(--pd)">D</b><span>busy Saturday morning until 1pm</span></li>
+          <li class="msg sys" data-show="5-6"><span>Everyone in golf voted. Dinner moves to after golf.</span></li>
+          <li class="msg" data-show="6-" data-final><b style="--c:var(--pb)">B</b><span>I’ll book golf</span></li>
         </ol>
       </div>
 
@@ -92,6 +109,7 @@
             <ul class="opts" data-show="2-2"><li>2 options · hours unverified</li><li class="muted">Provisional, not locked</li></ul>
             <ul class="opts" data-show="3-4"><li>Picazzo’s Healthy Italian Kitchen · its own site lists vegetarian options</li><li class="muted">Provisional, not locked</li></ul>
             <p class="locked" data-show="5-" data-final><svg aria-hidden="true"><use href="#i-lock"/></svg>Locked: Picazzo’s Healthy Italian Kitchen, after golf</p>
+            <p class="pending" data-show="6-" data-final>Waiting for a volunteer to book dinner</p>
           </section>
 
           <section class="needs" data-show="2-">
@@ -104,13 +122,25 @@
           <footer><span class="foot" data-foot></span><small>Illustrative plan, from the demo script</small></footer>
         </article>
       </div>
+
+      <nav class="dots" aria-label="Story steps">
+        <button type="button" aria-label="Step 1: Someone says it out loud"></button>
+        <button type="button" aria-label="Step 2: Friends opt in"></button>
+        <button type="button" aria-label="Step 3: Availability in plain chat"></button>
+        <button type="button" aria-label="Step 4: Needs stay private"></button>
+        <button type="button" aria-label="Step 5: Clashes go to the group"></button>
+        <button type="button" aria-label="Step 6: Vote, then lock"></button>
+        <button type="button" aria-label="Step 7: One person books"></button>
+        <a class="skip" href="#video">Skip to video</a>
+      </nav>
     </div>
   </section>
 
   <section class="video" id="video">
     <div class="wrap">
       <h2>Watch it run.</h2>
-      <div class="frame"><video src="media/brag.mp4?v=2" controls playsinline preload="metadata" title="PlanBot demo"></video></div>
+      <div class="frame"><video src="media/brag.mp4?v=2" poster="media/poster.jpg" controls playsinline preload="metadata" title="PlanBot demo">Your browser can’t play this video. <a href="media/brag.mp4?v=2">Download the demo (MP4)</a>.</video></div>
+      <p class="caption">A 25-second demo. One message in, one booked plan out.</p>
     </div>
   </section>
 
@@ -128,7 +158,7 @@
   <section class="close" id="start">
     <div class="wrap">
       <h2>Next up: your server.</h2>
-      <p>Add PlanBot to a Discord server, say what you want to do, and let it handle the rest. Or read how it works, line by line.</p>
+      <p>Add PlanBot to a Discord server, say what you want to do, and let it handle the rest. It asks for view channel, send messages, embed links, read history, and manage messages (used only to pin the plan card). Or read how it works, line by line.</p>
       <div class="actions">
         <a class="btn btn-go" href="https://discord.com/oauth2/authorize?client_id=1563776953037627452&amp;permissions=93184&amp;scope=bot%20applications.commands"><svg aria-hidden="true"><use href="#i-plus"/></svg>Add to Discord</a>
         <a class="btn btn-ghost" href="https://github.com/smanika3/PlanBot-DevHacks">View the code</a>
