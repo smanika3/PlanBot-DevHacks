@@ -50,8 +50,8 @@ h2 { font-weight: 800; font-size: clamp(2rem, 4.4vw, 3.4rem); line-height: 1.02;
 .btn svg { width: 1.1em; height: 1.1em; }
 .btn:hover { transform: translateY(-2px); }
 .btn:active { transform: none; }
-.btn-go { background: #4752C4; color: #fff; box-shadow: 0 6px 18px rgba(71, 82, 196, .28); }
-.btn-go:hover { box-shadow: 0 10px 26px rgba(71, 82, 196, .34); }
+.btn-go { background: #4752C4; color: #fff; box-shadow: 0 6px 18px rgba(0, 0, 0, .4); }
+.btn-go:hover { box-shadow: 0 10px 26px rgba(0, 0, 0, .5); }
 .btn-go:focus-visible { outline-color: var(--text); }
 .btn-sm { min-height: 40px; padding: 0 18px; font-size: 0.95rem; box-shadow: none; }
 .btn-ghost { box-shadow: 0 0 0 2px var(--muted) inset; }
