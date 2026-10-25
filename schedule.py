@@ -72,10 +72,15 @@ def options_for(kind: str, people: dict, now: datetime, earliest: datetime = Non
 
 
 def plan_segments(segments: list, now: datetime, n: int = 3) -> list:
-    """segments = [(kind, people)] in order. Later segments start after the leading option of the previous
-    one ends plus travel, so a shifted golf slot visibly moves dinner."""
+    """segments = [(kind, people)] or [(kind, people, locked_end)] in order. Later segments start after the leading
+    option of the previous one ends plus travel, so a shifted golf slot visibly moves dinner. A locked segment
+    yields no options and its real end is used instead of a leading option's."""
     result, earliest = [], None
-    for kind, people in segments:
+    for kind, people, *fixed in segments:
+        if fixed and fixed[0]:
+            result.append([])
+            earliest = fixed[0] + TRAVEL
+            continue
         opts = options_for(kind, people, now, earliest, n)
         result.append(opts)
         earliest = opts[0].end + TRAVEL if opts else earliest

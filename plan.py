@@ -59,7 +59,8 @@ def parse_kinds(text: str):
     return kinds[:4] or None
 
 
-def option_line(letter: str, o: dict) -> str:
+def _core(o: dict) -> str:
+    """when · where · hours, shared by option lines and the lock line."""
     s, e = datetime.fromisoformat(o["start"]), datetime.fromisoformat(o["end"])
     when = f"{s:%a %b %-d}, {s:%-I:%M%p}–{e:%-I:%M%p}".replace("AM", "am").replace("PM", "pm")
     if o["venue_name"]:
@@ -71,10 +72,32 @@ def option_line(letter: str, o: dict) -> str:
         hours = f"hours confirmed {datetime.fromisoformat(o['checked_at']).strftime('%b %-d %-I:%M%p').lower()}"
     else:
         hours = "⚠️ hours unverified"
+    return f"{when} · {where} · {hours}"
+
+
+def option_line(letter: str, o: dict) -> str:
     who = f"can't: {', '.join(o['blocked_by'])}" if o["blocked_by"] else "everyone who replied is free"
     if o["unknown_n"]:
         who += f" · {o['unknown_n']} haven't shared times"
-    return f"**{letter}.** {when} · {where} · {hours} · {who}"
+    votes = f" · 👍 {o['approvals']}" if "approvals" in o else ""
+    return f"**{letter}.** {_core(o)} · {who}{votes}"
+
+
+def render_segment(s: dict) -> str:
+    value = ", ".join(s["in"]) or "nobody yet"
+    if s.get("locked"):
+        return value + f"\n🔒 **Locked:** {_core(s['locked'])}"
+    if s["options"]:
+        tb = s.get("tiebreak")
+        if tb:
+            tied = ", ".join("ABC"[j] for j, o in enumerate(s["options"]) if o["key"] in tb["keys"])
+            value += (f"\n*Tie between {tied}: re-vote on those.*" if tb["round"] == 1
+                      else f"\n*Still tied between {tied}: the organizer picks.*")
+        elif s.get("total"):
+            value += f"\n{s['voted']} of {s['total']} voted (approve every option you can do)"
+        value += "\n" + "\n".join(option_line("ABC"[j], o) for j, o in enumerate(s["options"]))
+        value += "\n*Provisional, not locked.*"
+    return value
 
 
 def render(snap: dict, status: dict = None) -> discord.Embed:
@@ -82,11 +105,7 @@ def render(snap: dict, status: dict = None) -> discord.Embed:
     e = discord.Embed(title=f"Plan: {kinds}", description=f"Proposed by <@{snap['proposer_id']}>")
     has_options = any(s["options"] for s in snap["segments"])
     for i, s in enumerate(snap["segments"], 1):
-        value = ", ".join(s["in"]) or "nobody yet"
-        if s["options"]:
-            value += "\n" + "\n".join(option_line("ABC"[j], o) for j, o in enumerate(s["options"]))
-            value += "\n*Provisional, not locked.*"
-        e.add_field(name=f"{i}. {s['kind'].title()}", value=value[:1020], inline=False)
+        e.add_field(name=f"{i}. {s['kind'].title()}", value=render_segment(s)[:1020], inline=False)
     c = snap.get("constraints") or {}
     needs = []
     if c.get("diet"):

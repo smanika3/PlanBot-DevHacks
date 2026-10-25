@@ -4,11 +4,13 @@ import os
 
 import discord
 from discord import app_commands
+from discord.ext import tasks
 
 import db
 import engine
 import llm
 import plan
+import ui_polls
 import venue
 
 
@@ -29,7 +31,8 @@ HELP = """**PlanBot** turns "wanna golf this weekend, then dinner?" into a group
 • Say what you'd like to do in this channel and I'll post a plan card. Tap **I'm in** per activity.
 • Tell me your availability, budget, area, or what you can't do, in chat or by DM.
 • Diet or allergies: DM me. The group only ever sees anonymous needs, never who has them.
-• `/status` links the current plan card · `/edit` changes the activities and `/cancel` cancels (organizer only) · `/help` shows this."""
+• Vote with the buttons under the card: tap every option you could live with. An activity locks once everyone in it has voted.
+• `/reschedule` asks the group to move an activity · `/status` links the current plan card · `/edit` changes the activities and `/cancel` cancels (organizer only) · `/help` shows this."""
 
 
 async def ensure_pinned(msg: discord.Message):
@@ -64,17 +67,100 @@ class EditModal(discord.ui.Modal, title="Edit plan"):
 
 
 def card_view(snap: dict) -> discord.ui.View:
+    """Row 0: I'm in per activity. Then one row per open activity with up to 3 vote buttons (max 4 activities
+    = 5 rows, 16 components, inside Discord's 5 rows / 25 components)."""
     v = discord.ui.View(timeout=None)
     for s in snap["segments"]:
         v.add_item(SegButton(s["id"], s["kind"]))
+    row = 0
+    for s in snap["segments"]:
+        if s["locked"] or not s["options"] or row >= 4:
+            continue
+        row += 1
+        tb = s["tiebreak"]
+        for j, o in enumerate(s["options"][:3]):
+            if tb and o["key"] not in tb["keys"]:
+                continue
+            cls = PickButton if tb and tb["round"] == 2 else VoteButton
+            v.add_item(cls(s["id"], j, db.key_hash(o["key"]), s["kind"], row))
     return v
+
+
+async def _redraw(i: discord.Interaction, eid: int):
+    snap = db.snapshot(eid)
+    client = i.client
+    await i.response.edit_message(embed=plan.render(snap, client.card_status.get(eid)), view=card_view(snap))
+    await ensure_pinned(i.message)
+
+
+async def _stale(i: discord.Interaction, eid: int):
+    await i.response.send_message("Options changed, please vote again.", ephemeral=True)
+    await i.client.refresh_card(eid)
+
+
+def _current(sid, ord_, h):
+    """The option at this ord if it is still the one the button was made for, else None."""
+    opts = db.options(sid)
+    return opts[ord_] if ord_ < len(opts) and db.key_hash(db.option_key(opts[ord_])) == h else None
+
+
+class VoteButton(discord.ui.DynamicItem[discord.ui.Button], template=r"vote:(?P<sid>\d+):(?P<ord>\d+):(?P<h>\w+)"):
+    """Approval toggle for one option. The hash pins the button to the option it was drawn for."""
+    label_fmt = "{kind} {letter}"
+
+    def __init__(self, sid: int, ord_: int, h: str, kind: str = "", row: int = None):
+        super().__init__(discord.ui.Button(label=self.label_fmt.format(kind=kind.title(), letter="ABC"[ord_]).strip(),
+                                           custom_id=f"{self.prefix}:{sid}:{ord_}:{h}", row=row))
+        self.sid, self.ord, self.h = sid, ord_, h
+
+    prefix = "vote"
+
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match):
+        return cls(int(match["sid"]), int(match["ord"]), match["h"])
+
+    async def callback(self, i: discord.Interaction):
+        eid = db.event_of_segment(self.sid)
+        snap = db.snapshot(eid)
+        seg = next(s for s in snap["segments"] if s["id"] == self.sid)
+        if snap["status"] == "cancelled":
+            await i.response.send_message("This plan was cancelled.", ephemeral=True)
+        elif seg["locked"]:
+            await _redraw(i, eid)  # stale card: show the lock
+        elif (o := _current(self.sid, self.ord, self.h)) is None or (
+                seg["tiebreak"] and db.option_key(o) not in seg["tiebreak"]["keys"]):
+            await _stale(i, eid)
+        elif i.user.id not in db.segment_participants(self.sid):
+            await i.response.send_message("You're not in this activity, tap I'm in first.", ephemeral=True)
+        else:
+            await self.act(i, eid, seg, db.option_key(o))
+
+    async def act(self, i, eid, seg, key):
+        db.vote_toggle(self.sid, key, i.user.id)
+        db.settle(self.sid)
+        await _redraw(i, eid)
+        i.client.schedule_recompute(eid)  # a lock moves later activities
+
+
+class PickButton(VoteButton, template=r"pick:(?P<sid>\d+):(?P<ord>\d+):(?P<h>\w+)"):
+    """Organizer-only tie break."""
+    label_fmt = "Pick {kind} {letter}"
+    prefix = "pick"
+
+    async def act(self, i, eid, seg, key):
+        if i.user.id != db.snapshot(eid)["proposer_id"]:
+            await i.response.send_message("Only the organizer can break this tie.", ephemeral=True)
+            return
+        db.pick_tie(self.sid, key)
+        await _redraw(i, eid)
+        i.client.schedule_recompute(eid)
 
 
 class SegButton(discord.ui.DynamicItem[discord.ui.Button], template=r"seg:(?P<sid>\d+)"):
     """Per-segment "I'm in" toggle. Dynamic so buttons on old cards survive a restart."""
 
     def __init__(self, sid: int, kind: str):
-        super().__init__(discord.ui.Button(label=f"I'm in: {kind}", custom_id=f"seg:{sid}"))
+        super().__init__(discord.ui.Button(label=f"I'm in: {kind}", custom_id=f"seg:{sid}", row=0))
         self.sid = sid
 
     @classmethod
@@ -86,11 +172,9 @@ class SegButton(discord.ui.DynamicItem[discord.ui.Button], template=r"seg:(?P<si
             await interaction.response.send_message("This plan was cancelled.", ephemeral=True)
             return
         eid = db.toggle(self.sid, interaction.user.id, interaction.user.display_name)
-        snap = db.snapshot(eid)
-        client = interaction.client
-        await interaction.response.edit_message(embed=plan.render(snap, client.card_status.get(eid)), view=card_view(snap))
-        await ensure_pinned(interaction.message)
-        client.schedule_recompute(eid)
+        db.settle_event(eid)  # someone leaving can complete a vote; a locked segment never reopens here
+        await _redraw(interaction, eid)
+        interaction.client.schedule_recompute(eid)
 
 
 class PlanBot(discord.Client):
@@ -131,10 +215,24 @@ class PlanBot(discord.Client):
                     break
         finally:
             self.running.discard(event_id)
+        # after the finally, so a recompute it triggers is not swallowed by the still-set `running` flag
+        try:
+            await ui_polls.on_recompute_done(self, event_id)
+        except Exception:
+            logging.exception("conflict detection failed")
+
+    @tasks.loop(seconds=60)
+    async def poll_sweeper(self):
+        try:
+            await ui_polls.sweep(self)  # closes polls past their deadline; deadlines live in the DB
+        except Exception:
+            logging.exception("poll sweep failed")
 
     async def setup_hook(self):
         db.init()
-        self.add_dynamic_items(SegButton)
+        self.add_dynamic_items(SegButton, VoteButton, PickButton)
+        ui_polls.register(self)
+        self.poll_sweeper.start()
         tree = app_commands.CommandTree(self)
         guild = discord.Object(id=self.guild_id)
 
@@ -162,6 +260,11 @@ class PlanBot(discord.Client):
             else:
                 current = ", ".join(s["kind"] for s in db.snapshot(ev["id"])["segments"])
                 await i.response.send_modal(EditModal(self, ev, current))
+
+        @tree.command(name="reschedule", description="Ask the group to move an activity", guild=guild)
+        @app_commands.describe(activity="Which activity (only needed if you are in several)")
+        async def reschedule(i: discord.Interaction, activity: str = None):
+            await ui_polls.reschedule_command(self, i, activity)
 
         @tree.command(name="cancel", description="Cancel the current plan (organizer only)", guild=guild)
         async def cancel(i: discord.Interaction):
@@ -213,6 +316,7 @@ class PlanBot(discord.Client):
         if not p:
             return
         db.apply(event_id, m.author.id, m.author.display_name, p)
+        db.settle_event(event_id)
         await self.refresh_card(event_id)
         self.schedule_recompute(event_id)
         pub, priv = plan.echo(p)

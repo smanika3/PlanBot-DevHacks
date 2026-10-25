@@ -28,10 +28,13 @@ def run(event_id: int, now: datetime, venues: list, hours_fn=venue.check_hours) 
     snap = db.snapshot(event_id)
     c = snap["constraints"]
     segs = snap["segments"]
-    slots = schedule.plan_segments([(s["kind"], db.people_for_segment(s["id"])) for s in segs], now)
+    slots = schedule.plan_segments([(s["kind"], db.people_for_segment(s["id"]),
+                                     s["locked"] and datetime.fromisoformat(s["locked"]["end"])) for s in segs], now)
     checked = unverified = 0
     notes = []
     for seg, seg_slots in zip(segs, slots):
+        if seg["locked"]:
+            continue
         shortlist, seg_notes = venue.shortlist(seg["kind"], c, venues)
         notes += [f"{seg['kind']}: {n}" for n in seg_notes]
         used, opts = set(), []
