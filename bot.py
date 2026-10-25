@@ -27,7 +27,7 @@ HELP = """**PlanBot** turns "wanna golf this weekend, then dinner?" into a group
 • Say what you'd like to do in this channel and I'll post a plan card. Tap **I'm in** per activity.
 • Tell me your availability, budget, area, or what you can't do, in chat or by DM.
 • Diet or allergies: DM me. The group only ever sees anonymous needs, never who has them.
-• `/status` links the current plan card · `/cancel` cancels it (organizer only) · `/help` shows this."""
+• `/status` links the current plan card · `/edit` changes the activities and `/cancel` cancels (organizer only) · `/help` shows this."""
 
 
 async def ensure_pinned(msg: discord.Message):
@@ -37,6 +37,27 @@ async def ensure_pinned(msg: discord.Message):
             await msg.pin()
         except discord.HTTPException:
             logging.warning("could not re-pin card")
+
+
+class EditModal(discord.ui.Modal, title="Edit plan"):
+    kinds = discord.ui.TextInput(label="Activities in order, comma-separated (max 4)", max_length=80)
+
+    def __init__(self, client, ev, current: str):
+        super().__init__()
+        self.client, self.ev = client, ev
+        self.kinds.default = current
+
+    async def on_submit(self, i: discord.Interaction):
+        parsed = plan.parse_kinds(self.kinds.value)
+        if i.user.id != self.ev["proposer_id"] or db.open_event(self.ev["channel_id"]) is None:
+            await i.response.send_message("This plan can no longer be edited by you.", ephemeral=True)
+        elif not parsed:
+            await i.response.send_message("Use short activity names separated by commas, e.g. `golf, dinner`.",
+                                          ephemeral=True)
+        else:
+            db.set_segments(self.ev["id"], parsed, i.user.id)
+            await i.response.send_message(f"Plan updated: {' → '.join(parsed)}", ephemeral=True)
+            await self.client.refresh_card(self.ev["id"])
 
 
 def card_view(snap: dict) -> discord.ui.View:
@@ -93,6 +114,18 @@ class PlanBot(discord.Client):
                 return
             url = f"https://discord.com/channels/{i.guild_id}/{ev['channel_id']}/{ev['card_message_id']}"
             await i.response.send_message(f"Current plan: {url}", ephemeral=True)
+
+        @tree.command(name="edit", description="Change the activities in the plan (organizer only)", guild=guild)
+        async def edit(i: discord.Interaction):
+            ev = db.open_event(i.channel_id)
+            if not ev:
+                await i.response.send_message("No open plan in this channel.", ephemeral=True)
+            elif i.user.id != ev["proposer_id"]:
+                await i.response.send_message(f"Only the organizer (<@{ev['proposer_id']}>) can edit this plan.",
+                                              ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+            else:
+                current = ", ".join(s["kind"] for s in db.snapshot(ev["id"])["segments"])
+                await i.response.send_modal(EditModal(self, ev, current))
 
         @tree.command(name="cancel", description="Cancel the current plan (organizer only)", guild=guild)
         async def cancel(i: discord.Interaction):

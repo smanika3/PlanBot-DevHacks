@@ -60,6 +60,22 @@ def cancel(event_id):
     con.commit()
 
 
+def set_segments(event_id, kinds, organizer_id):
+    """Replace the activity list. Kept activities keep their participants; new ones start with the organizer in."""
+    cur = {r["kind"]: r["id"] for r in con.execute("SELECT id, kind FROM segments WHERE event_id=?", (event_id,))}
+    for kind, sid in cur.items():
+        if kind not in kinds:
+            con.execute("DELETE FROM participation WHERE segment_id=?", (sid,))
+            con.execute("DELETE FROM segments WHERE id=?", (sid,))
+    for i, kind in enumerate(kinds):
+        if kind in cur:
+            con.execute("UPDATE segments SET ord=? WHERE id=?", (i, cur[kind]))
+        else:
+            sid = con.execute("INSERT INTO segments(event_id,kind,ord) VALUES(?,?,?)", (event_id, kind, i)).lastrowid
+            con.execute("INSERT INTO participation VALUES(?,?,'in')", (organizer_id, sid))
+    con.commit()
+
+
 def event_of_segment(segment_id):
     return con.execute("SELECT event_id FROM segments WHERE id=?", (segment_id,)).fetchone()["event_id"]
 

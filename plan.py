@@ -45,6 +45,20 @@ def detect(text: str):
     return None
 
 
+def parse_kinds(text: str):
+    """'Golf, mini golf , dinner' -> ['golf', 'mini golf', 'dinner']; None if empty or invalid. Max 4."""
+    kinds = []
+    for k in re.split(r",|\bthen\b|→|->", text.lower()):
+        k = " ".join(k.split())
+        if not k:
+            continue
+        if not re.fullmatch(r"[a-z][a-z \-]{0,19}", k):
+            return None
+        if k not in kinds:
+            kinds.append(k)
+    return kinds[:4] or None
+
+
 def render(snap: dict) -> discord.Embed:
     kinds = " → ".join(s["kind"] for s in snap["segments"])
     e = discord.Embed(title=f"Plan: {kinds}", description=f"Proposed by <@{snap['proposer_id']}>")

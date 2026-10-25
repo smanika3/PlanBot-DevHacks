@@ -22,6 +22,26 @@ def test_gate_catches_diet_and_money_wording():
     assert not plan.LISTEN.search("lol that movie was great")
 
 
+def test_parse_kinds():
+    assert plan.parse_kinds("Golf, mini golf ,dinner") == ["golf", "mini golf", "dinner"]
+    assert plan.parse_kinds("golf then dinner then golf") == ["golf", "dinner"]
+    assert plan.parse_kinds("a,b,c,d,e") == ["a", "b", "c", "d"]
+    assert plan.parse_kinds("  ,, ") is None and plan.parse_kinds("g0lf!") is None
+
+
+def test_set_segments_keeps_participants():
+    db.init(":memory:")
+    eid = db.create_event(1, 10, "Ann", ["golf", "dinner"])
+    golf = db.snapshot(eid)["segments"][0]["id"]
+    db.toggle(golf, 11, "Bo")
+    db.set_segments(eid, ["dinner", "golf", "bowling"], 10)  # reorder + add one + keep both
+    segs = db.snapshot(eid)["segments"]
+    assert [s["kind"] for s in segs] == ["dinner", "golf", "bowling"]
+    assert segs[1]["in"] == ["Ann", "Bo"] and segs[2]["in"] == ["Ann"]
+    db.set_segments(eid, ["bowling"], 10)  # remove the rest
+    assert [s["kind"] for s in db.snapshot(eid)["segments"]] == ["bowling"]
+
+
 def test_cancel_closes_event():
     db.init(":memory:")
     eid = db.create_event(1, 10, "Ann", ["golf"])
