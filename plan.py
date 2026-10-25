@@ -93,7 +93,8 @@ def render_segment(s: dict) -> str:
         head = value[:200].rsplit(", ", 1)[0]
         value = f"{head} +{len(s['in']) - head.count(', ') - 1} more"
     if s.get("locked"):
-        return value + f"\n🔒 **Locked:** {_core(s['locked'])}"
+        out = value + f"\n🔒 **Locked:** {_core(s['locked'])}"
+        return out + (f"\n✅ Booked by {s['booked_by']}" if s.get("booked_by") else "")
     if s["options"]:
         tb = s.get("tiebreak")
         if tb:

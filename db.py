@@ -129,7 +129,7 @@ def snapshot(event_id) -> dict:
         voters = set().union(*appr.values()) & who  # counts only, never who voted for what
         tb = con.execute("SELECT * FROM tiebreak WHERE segment_id=?", (s["id"],)).fetchone()
         segs.append({"id": s["id"], "kind": s["kind"], "in": names, "options": opts, "status": s["status"],
-                     "locked": locked(s["id"]), "voted": len(voters), "total": len(who),
+                     "locked": locked(s["id"]), "booked_by": _booked_by(s["id"]), "voted": len(voters), "total": len(who),
                      "tiebreak": tb and {"round": tb["round"], "keys": json.loads(tb["keys"])}})
     n_in = con.execute(
         "SELECT COUNT(DISTINCT q.person_id) FROM participation q JOIN segments s ON s.id=q.segment_id "
@@ -297,13 +297,20 @@ def lock_segment(segment_id, option_dict):
     con.commit()
 
 
+def _booked_by(segment_id):
+    import booking  # lazy: booking imports db
+    return booking.booked_by(segment_id)
+
+
 def unlock_segment(segment_id):
     """Reopen this segment and every later one of the event: they were scheduled around it."""
+    import booking  # lazy: booking imports db
     s = con.execute("SELECT event_id, ord FROM segments WHERE id=?", (segment_id,)).fetchone()
     for r in con.execute("SELECT id FROM segments WHERE event_id=? AND ord>=?", (s["event_id"], s["ord"])).fetchall():
         for t in ("votes", "locks", "tiebreak"):
             con.execute(f"DELETE FROM {t} WHERE segment_id=?", (r["id"],))
         con.execute("UPDATE segments SET status='planning' WHERE id=?", (r["id"],))
+        booking.reset(r["id"])  # a reopened activity must not keep a stale booking
     con.commit()
 
 

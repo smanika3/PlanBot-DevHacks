@@ -10,6 +10,7 @@ import db
 import engine
 import llm
 import plan
+import ui_booking
 import ui_polls
 import venue
 
@@ -138,9 +139,11 @@ class VoteButton(discord.ui.DynamicItem[discord.ui.Button], template=r"vote:(?P<
 
     async def act(self, i, eid, seg, key):
         db.vote_toggle(self.sid, key, i.user.id)
-        db.settle(self.sid)
+        locked = db.settle(self.sid) == "locked"
         await _redraw(i, eid)
         i.client.schedule_recompute(eid)  # a lock moves later activities
+        if locked:
+            await ui_booking.on_locked(i.client, eid, [self.sid])
 
 
 class PickButton(VoteButton, template=r"pick:(?P<sid>\d+):(?P<ord>\d+):(?P<h>\w+)"):
@@ -152,9 +155,11 @@ class PickButton(VoteButton, template=r"pick:(?P<sid>\d+):(?P<ord>\d+):(?P<h>\w+
         if i.user.id != db.snapshot(eid)["proposer_id"]:
             await i.response.send_message("Only the organizer can break this tie.", ephemeral=True)
             return
-        db.pick_tie(self.sid, key)
+        locked = db.pick_tie(self.sid, key)
         await _redraw(i, eid)
         i.client.schedule_recompute(eid)
+        if locked:
+            await ui_booking.on_locked(i.client, eid, [self.sid])
 
 
 class SegButton(discord.ui.DynamicItem[discord.ui.Button], template=r"seg:(?P<sid>\d+)"):
@@ -173,9 +178,11 @@ class SegButton(discord.ui.DynamicItem[discord.ui.Button], template=r"seg:(?P<si
             await interaction.response.send_message("This plan was cancelled.", ephemeral=True)
             return
         eid = db.toggle(self.sid, interaction.user.id, interaction.user.display_name)
-        db.settle_event(eid)  # someone leaving can complete a vote; a locked segment never reopens here
+        locked = db.settle_event(eid)  # someone leaving can complete a vote; a locked segment never reopens here
         await _redraw(interaction, eid)
         interaction.client.schedule_recompute(eid)
+        if locked:
+            await ui_booking.on_locked(interaction.client, eid, locked)
 
 
 class PlanBot(discord.Client):
@@ -229,11 +236,19 @@ class PlanBot(discord.Client):
             await ui_polls.sweep(self)  # closes polls past their deadline; deadlines live in the DB
         except Exception:
             logging.exception("poll sweep failed")
+        try:
+            await ui_booking.sweep(self)  # one reminder if nobody volunteered to book
+            # safety net for lock paths that do not call on_locked directly (poll outcomes); it is idempotent
+            for r in db.con.execute("SELECT s.event_id, l.segment_id FROM locks l JOIN segments s ON s.id=l.segment_id").fetchall():
+                await ui_booking.on_locked(self, r["event_id"], [r["segment_id"]])
+        except Exception:
+            logging.exception("booking sweep failed")
 
     async def setup_hook(self):
         db.init()
         self.add_dynamic_items(SegButton, VoteButton, PickButton)
         ui_polls.register(self)
+        ui_booking.register(self)
         self.poll_sweeper.start()
         tree = app_commands.CommandTree(self)
         guild = discord.Object(id=self.guild_id)
@@ -318,9 +333,11 @@ class PlanBot(discord.Client):
         if not p:
             return
         db.apply(event_id, m.author.id, m.author.display_name, p)
-        db.settle_event(event_id)
+        locked = db.settle_event(event_id)
         await self.refresh_card(event_id)
         self.schedule_recompute(event_id)
+        if locked:
+            await ui_booking.on_locked(self, event_id, locked)
         pub, priv = plan.echo(p)
         if private:
             await m.reply((pub + "\n" + priv).strip())
