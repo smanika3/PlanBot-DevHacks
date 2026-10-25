@@ -1,0 +1,20 @@
+# private working notes
+HANDOFF.md
+DESIGN.md
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# local state
+*.db
+*.sqlite
+*.sqlite3
+data/*.db
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
