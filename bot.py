@@ -62,17 +62,55 @@ class PlanBot(discord.Client):
         logging.info("online as %s", self.user)
 
     async def on_message(self, m: discord.Message):
-        if should_ignore(m.author.bot, m.guild and m.guild.id, m.channel.id, self.guild_id, self.channel_id):
+        if m.guild is None:  # DM intake (diet etc.), only for people already in an open plan
+            if not m.author.bot:
+                ev = db.event_for_person(m.author.id)
+                if ev:
+                    await self.listen(m, ev["id"], private=True)
+                else:
+                    await m.reply("I'm not tracking a plan for you yet. Tap an \"I'm in\" button on the plan card first.")
+            return
+        if should_ignore(m.author.bot, m.guild.id, m.channel.id, self.guild_id, self.channel_id):
             return
         text = m.content.strip()
+        ev = db.open_event(m.channel.id)  # ponytail: one open event per channel, enough for the demo
         if text == "!ping":
             await m.reply("pong")
         elif text == "!llm":
             await m.reply(await asyncio.to_thread(llm.complete, "Reply with the single word: pong", "", 10))
-        elif not db.open_event(m.channel.id):  # ponytail: one open event per channel, enough for the demo
+        elif ev:
+            await self.listen(m, ev["id"])
+        else:
             kinds = await asyncio.to_thread(plan.detect, text)
             if kinds:
                 await self.kickoff(m, kinds)
+
+    async def listen(self, m: discord.Message, event_id: int, private=False):
+        p = await asyncio.to_thread(plan.listen, m.content)
+        if not p:
+            return
+        db.apply(event_id, m.author.id, m.author.display_name, p)
+        await self.refresh_card(event_id)
+        pub, priv = plan.echo(p)
+        if private:
+            await m.reply((pub + "\n" + priv).strip())
+            return
+        if pub:
+            await m.reply(pub, mention_author=False)
+        if priv:  # diet never goes to the channel
+            try:
+                await m.author.send(f"Noted privately: {priv}")
+            except discord.Forbidden:
+                logging.info("DMs closed for a user; diet echo skipped")
+
+    async def refresh_card(self, event_id: int):
+        snap = db.snapshot(event_id)
+        ev = db.con.execute("SELECT * FROM events WHERE id=?", (event_id,)).fetchone()
+        try:
+            msg = await self.get_channel(ev["channel_id"]).fetch_message(ev["card_message_id"])
+            await msg.edit(embed=plan.render(snap), view=card_view(snap))
+        except discord.HTTPException:
+            logging.warning("could not refresh card")
 
     async def kickoff(self, m: discord.Message, kinds: list[str]):
         eid = db.create_event(m.channel.id, m.author.id, m.author.display_name, kinds)

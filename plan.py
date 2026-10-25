@@ -1,7 +1,10 @@
 """Planning-intent detection and the kickoff card."""
 import json
 import logging
+import os
 import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import discord
 
@@ -47,5 +50,104 @@ def render(snap: dict) -> discord.Embed:
     e = discord.Embed(title=f"Plan: {kinds}", description=f"Proposed by <@{snap['proposer_id']}>")
     for i, s in enumerate(snap["segments"], 1):
         e.add_field(name=f"{i}. {s['kind'].title()}", value=", ".join(s["in"]) or "nobody yet", inline=False)
+    c = snap.get("constraints") or {}
+    needs = []
+    if c.get("diet"):
+        needs.append("Dietary: " + ", ".join(c["diet"]))  # aggregate only, never who
+    if c.get("budget"):
+        needs.append("Budget: " + "$" * c["budget"] + " or less")
+    if c.get("area"):
+        needs.append(f"Area: {c['area'][0]} ({'required' if c['area'][1] else 'preferred'})")
+    if needs:
+        e.add_field(name="Group needs", value="\n".join(needs), inline=False)
     e.set_footer(text="Planning started" if snap["planning"] else "Planning starts once one more person is in")
     return e
+
+
+# Cheap gate: only messages that look like availability, diet, budget, area or in/out go to the model.
+LISTEN = re.compile(
+    r"\b(free|busy|available|can'?t|cannot|after|before|tonight|tomorrow|weekend|mon|tue|wed|thu|fri|sat|sun|"
+    r"\d\s?(am|pm)|vegetarian|vegan|gluten|allerg|halal|kosher|pescatarian|dairy|nut|diet|budget|cheap|under \$?\d|"
+    r"\$|around|near|downtown|campus|area|in for|there for|skip|i'?m out|count me)\b", re.I)
+LISTEN_SYSTEM = """Extract planning info from one chat message. Today is {today}. Times are local, no timezone.
+Reply with JSON only, using null or [] when absent:
+{"free": [{"start": "YYYY-MM-DDTHH:MM", "end": "YYYY-MM-DDTHH:MM"}], "busy": [same shape],
+ "diet": ["vegetarian"], "diet_hard": true|false, "budget": 1-4 or null, "area": "short place name" or null,
+ "area_hard": true|false, "segments": [{"kind": "golf", "status": "in"|"out"}]}
+free = windows the person can do; busy = windows they cannot. Weekday names always mean the next such day
+on or after today, never a past date. "after 6" ends at 23:59 the same day. diet_hard is true for allergies or "has to be",
+false for "prefer". budget: 1 cheap to 4 expensive; N dollar signs means N ("under $$" is 2). area_hard is true only for "has to be" style wording;
+"preferably Tempe" is false. segments only when the person says they are in or out of an activity; kind is a
+one-word lowercase activity. Never infer anything that was not stated."""
+
+
+def _windows(items):
+    out = []
+    for w in items if isinstance(items, list) else []:
+        try:
+            s, e = datetime.fromisoformat(w["start"]), datetime.fromisoformat(w["end"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if s < e:
+            out.append((s.isoformat(timespec="minutes"), e.isoformat(timespec="minutes")))
+    return out
+
+
+def parse_listen(out: str):
+    """LLM output -> validated dict, or None when nothing usable was said."""
+    m = re.search(r"\{.*\}", out, re.S)
+    try:
+        j = json.loads(m.group()) if m else None
+    except ValueError:
+        j = None
+    if not isinstance(j, dict):
+        return None
+    diet = [d.strip().lower() for d in j.get("diet") or [] if isinstance(d, str) and d.strip()]
+    budget = j.get("budget")
+    area = j.get("area")
+    p = {
+        "free": _windows(j.get("free")), "busy": _windows(j.get("busy")),
+        "diet": diet, "diet_hard": j.get("diet_hard") is True,
+        "budget": budget if isinstance(budget, int) and 1 <= budget <= 4 else None,
+        "area": area.strip() if isinstance(area, str) and area.strip() else None,
+        "area_hard": j.get("area_hard") is True,
+        "segments": [(s["kind"].strip().lower(), s["status"]) for s in j.get("segments") or []
+                     if isinstance(s, dict) and isinstance(s.get("kind"), str) and s.get("status") in ("in", "out")],
+    }
+    return p if any(p[k] for k in ("free", "busy", "diet", "budget", "area", "segments")) else None
+
+
+def listen(text: str):
+    if not LISTEN.search(text):
+        return None
+    today = datetime.now(ZoneInfo(os.environ.get("TZ_NAME", "America/Phoenix"))).strftime("%A %Y-%m-%d")
+    system = LISTEN_SYSTEM.replace("{today}", today)
+    for _ in range(2):
+        try:
+            return parse_listen(llm.complete(text, system, 400))
+        except Exception:
+            log.exception("listen call failed")
+    return None
+
+
+def _span(s, e):
+    s, e = datetime.fromisoformat(s), datetime.fromisoformat(e)
+    end = e.strftime("%-I:%M%p") if s.date() == e.date() else e.strftime("%a %-I:%M%p")
+    return f"{s.strftime('%a %-I:%M%p')}–{end}".lower()
+
+
+def echo(p: dict):
+    """(public, private). Diet only ever appears in the private part."""
+    pub = []
+    for label, key in (("free", "free"), ("busy", "busy")):
+        pub += [f"{label} {_span(s, e)}" for s, e in p[key]]
+    for kind, status in p["segments"]:
+        pub.append(f"{status} for {kind}")
+    if p["budget"]:
+        pub.append("budget " + "$" * p["budget"])
+    if p["area"]:
+        pub.append(f"area {p['area']} ({'must' if p['area_hard'] else 'preferably'})")
+    priv = ""
+    if p["diet"]:
+        priv = f"diet {', '.join(p['diet'])} ({'must' if p['diet_hard'] else 'preference'}), shared with the group only as an anonymous need"
+    return ("Understood: " + " · ".join(pub) + ". Reply to correct me.") if pub else "", priv

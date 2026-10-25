@@ -1,4 +1,5 @@
 """SQLite plan state. One connection, tiny queries, so plain sync calls are fine in the event loop."""
+import json
 import os
 import sqlite3
 import time
@@ -12,6 +13,11 @@ CREATE TABLE IF NOT EXISTS segments(
   id INTEGER PRIMARY KEY, event_id INTEGER, kind TEXT, ord INTEGER, status TEXT DEFAULT 'planning');
 CREATE TABLE IF NOT EXISTS participation(
   person_id INTEGER, segment_id INTEGER, status TEXT, PRIMARY KEY(person_id, segment_id));
+CREATE TABLE IF NOT EXISTS prefs(
+  person_id INTEGER PRIMARY KEY, diet TEXT, diet_hard INTEGER DEFAULT 0, budget INTEGER,
+  area TEXT, area_hard INTEGER DEFAULT 0, updated_at REAL);
+CREATE TABLE IF NOT EXISTS avail(
+  id INTEGER PRIMARY KEY, event_id INTEGER, person_id INTEGER, kind TEXT, start TEXT, end TEXT);
 """
 con: sqlite3.Connection
 
@@ -76,4 +82,49 @@ def snapshot(event_id) -> dict:
     if planning and ev["status"] == "collecting":
         con.execute("UPDATE events SET status='planning' WHERE id=?", (event_id,))
         con.commit()
-    return {"id": event_id, "proposer_id": ev["proposer_id"], "segments": segs, "planning": planning, "n_in": n_in}
+    return {"id": event_id, "proposer_id": ev["proposer_id"], "segments": segs, "planning": planning,
+            "n_in": n_in, "constraints": constraints(event_id)}
+
+
+def event_for_person(person_id):
+    """Open event this person is part of (used to route DMs)."""
+    return con.execute(
+        "SELECT DISTINCT e.* FROM events e JOIN segments s ON s.event_id=e.id "
+        "JOIN participation q ON q.segment_id=s.id WHERE q.person_id=? AND e.status!='done' "
+        "ORDER BY e.id DESC LIMIT 1", (person_id,)).fetchone()
+
+
+def apply(event_id, person_id, name, p: dict):
+    """Store a parsed message. Later availability replaces earlier; prefs only change if stated."""
+    _person(person_id, name)
+    old = con.execute("SELECT * FROM prefs WHERE person_id=?", (person_id,)).fetchone()
+    diet = json.dumps(p["diet"]) if p["diet"] else (old["diet"] if old else None)
+    diet_hard = int(p["diet_hard"]) if p["diet"] else (old["diet_hard"] if old else 0)
+    budget = p["budget"] if p["budget"] is not None else (old["budget"] if old else None)
+    area, area_hard = (p["area"], int(p["area_hard"])) if p["area"] else (
+        (old["area"], old["area_hard"]) if old else (None, 0))
+    con.execute("INSERT OR REPLACE INTO prefs VALUES(?,?,?,?,?,?,?)",
+                (person_id, diet, diet_hard, budget, area, area_hard, time.time()))
+    if p["free"] or p["busy"]:
+        con.execute("DELETE FROM avail WHERE event_id=? AND person_id=?", (event_id, person_id))
+        for kind in ("free", "busy"):
+            for s, e in p[kind]:
+                con.execute("INSERT INTO avail(event_id,person_id,kind,start,end) VALUES(?,?,?,?,?)",
+                            (event_id, person_id, kind, s, e))
+    for kind, status in p["segments"]:
+        seg = con.execute("SELECT id FROM segments WHERE event_id=? AND kind=?", (event_id, kind)).fetchone()
+        if seg:
+            con.execute("INSERT OR REPLACE INTO participation VALUES(?,?,?)", (person_id, seg["id"], status))
+    con.commit()
+
+
+def constraints(event_id) -> dict:
+    """Aggregate only: no names leave this function. Diet is the union, budget the lowest cap, area the latest."""
+    rows = con.execute(
+        "SELECT f.* FROM prefs f WHERE f.person_id IN (SELECT q.person_id FROM participation q "
+        "JOIN segments s ON s.id=q.segment_id WHERE s.event_id=? AND q.status='in') ORDER BY f.updated_at",
+        (event_id,)).fetchall()
+    diet = sorted({d for r in rows if r["diet"] for d in json.loads(r["diet"])})
+    budgets = [r["budget"] for r in rows if r["budget"]]
+    areas = [(r["area"], bool(r["area_hard"])) for r in rows if r["area"]]
+    return {"diet": diet, "budget": min(budgets) if budgets else None, "area": areas[-1] if areas else None}
