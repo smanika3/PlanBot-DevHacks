@@ -57,6 +57,14 @@
     scrollTo({ top: story.offsetTop + per * (i + 0.5) });
   }));
 
+  // click-to-load YouTube: nothing from YouTube loads until the viewer asks for it
+  const yt = document.querySelector('[data-yt]');
+  yt.querySelector('.play').addEventListener('click', e => {
+    e.preventDefault();
+    yt.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${yt.dataset.yt}?autoplay=1&rel=0&playsinline=1" title="PlanBot demo" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`;
+    yt.querySelector('iframe').focus();
+  });
+
   let queued = false;
   const tick = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; frame(); }); } };
   addEventListener('scroll', tick, { passive: true });
