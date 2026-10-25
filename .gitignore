@@ -21,3 +21,9 @@ __pycache__/
 
 # local-only notes
 KNOWN_ISSUES.md
+
+# editor/os and design-tool clutter
+.DS_Store
+.impeccable/
+PRODUCT.md
+brag-output/
