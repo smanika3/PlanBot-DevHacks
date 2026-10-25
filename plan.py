@@ -59,11 +59,34 @@ def parse_kinds(text: str):
     return kinds[:4] or None
 
 
-def render(snap: dict) -> discord.Embed:
+def option_line(letter: str, o: dict) -> str:
+    s, e = datetime.fromisoformat(o["start"]), datetime.fromisoformat(o["end"])
+    when = f"{s:%a %b %-d}, {s:%-I:%M%p}–{e:%-I:%M%p}".replace("AM", "am").replace("PM", "pm")
+    if o["venue_name"]:
+        src = f" ([source]({o['source_url']}))" if o["source_url"] else ""
+        where = f"**{o['venue_name']}**{src}"
+    else:
+        where = "venue TBD (no venue data for this activity)"
+    if o["hours_status"] == "verified":
+        hours = f"hours confirmed {datetime.fromisoformat(o['checked_at']).strftime('%b %-d %-I:%M%p').lower()}"
+    else:
+        hours = "⚠️ hours unverified"
+    who = f"can't: {', '.join(o['blocked_by'])}" if o["blocked_by"] else "everyone who replied is free"
+    if o["unknown_n"]:
+        who += f" · {o['unknown_n']} haven't shared times"
+    return f"**{letter}.** {when} · {where} · {hours} · {who}"
+
+
+def render(snap: dict, status: dict = None) -> discord.Embed:
     kinds = " → ".join(s["kind"] for s in snap["segments"])
     e = discord.Embed(title=f"Plan: {kinds}", description=f"Proposed by <@{snap['proposer_id']}>")
+    has_options = any(s["options"] for s in snap["segments"])
     for i, s in enumerate(snap["segments"], 1):
-        e.add_field(name=f"{i}. {s['kind'].title()}", value=", ".join(s["in"]) or "nobody yet", inline=False)
+        value = ", ".join(s["in"]) or "nobody yet"
+        if s["options"]:
+            value += "\n" + "\n".join(option_line("ABC"[j], o) for j, o in enumerate(s["options"]))
+            value += "\n*Provisional, not locked.*"
+        e.add_field(name=f"{i}. {s['kind'].title()}", value=value[:1020], inline=False)
     c = snap.get("constraints") or {}
     needs = []
     if c.get("diet"):
@@ -74,7 +97,13 @@ def render(snap: dict) -> discord.Embed:
         needs.append(f"Area: {c['area'][0]} ({'required' if c['area'][1] else 'preferred'})")
     if needs:
         e.add_field(name="Group needs", value="\n".join(needs), inline=False)
-    e.set_footer(text="Planning started" if snap["planning"] else "Planning starts once one more person is in")
+    if status:
+        e.add_field(name="Agents", value="\n".join(f"**{k}:** {v}" for k, v in status.items())[:1020], inline=False)
+    if has_options:
+        e.set_footer(text=f"Provisional · {snap['replied']} of {snap['n_in']} replied")
+    else:
+        e.set_footer(text=(f"Planning started · {snap['replied']} of {snap['n_in']} shared times"
+                           if snap["planning"] else "Planning starts once one more person is in"))
     return e
 
 

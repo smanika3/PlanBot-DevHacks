@@ -6,8 +6,10 @@ import discord
 from discord import app_commands
 
 import db
+import engine
 import llm
 import plan
+import venue
 
 
 def load_env(path=".env"):
@@ -58,6 +60,7 @@ class EditModal(discord.ui.Modal, title="Edit plan"):
             db.set_segments(self.ev["id"], parsed, i.user.id)
             await i.response.send_message(f"Plan updated: {' → '.join(parsed)}", ephemeral=True)
             await self.client.refresh_card(self.ev["id"])
+            self.client.schedule_recompute(self.ev["id"])
 
 
 def card_view(snap: dict) -> discord.ui.View:
@@ -84,8 +87,10 @@ class SegButton(discord.ui.DynamicItem[discord.ui.Button], template=r"seg:(?P<si
             return
         eid = db.toggle(self.sid, interaction.user.id, interaction.user.display_name)
         snap = db.snapshot(eid)
-        await interaction.response.edit_message(embed=plan.render(snap), view=card_view(snap))
+        client = interaction.client
+        await interaction.response.edit_message(embed=plan.render(snap, client.card_status.get(eid)), view=card_view(snap))
         await ensure_pinned(interaction.message)
+        client.schedule_recompute(eid)
 
 
 class PlanBot(discord.Client):
@@ -95,6 +100,37 @@ class PlanBot(discord.Client):
         super().__init__(intents=intents)
         self.guild_id = int(os.environ["DISCORD_GUILD_ID"])
         self.channel_id = int(os.environ["DISCORD_CHANNEL_ID"])
+        self.venues = venue.load()
+        self.card_status = {}  # event id -> live per-role status lines shown on the card
+        self.running, self.dirty = set(), set()
+
+    def schedule_recompute(self, event_id: int):
+        """Recompute options in the background. A change during a run triggers one more run, never a pile-up."""
+        if event_id in self.running:
+            self.dirty.add(event_id)
+        else:
+            self.running.add(event_id)
+            asyncio.create_task(self._recompute(event_id))
+
+    async def _recompute(self, event_id: int):
+        try:
+            while True:
+                self.dirty.discard(event_id)
+                if not engine.ready(db.snapshot(event_id)) or db.snapshot(event_id)["status"] == "cancelled":
+                    break
+                self.card_status[event_id] = {"Preferences": "refreshing…", "Schedule": "ranking slots…",
+                                         "Venue": "checking opening hours…"}
+                await self.refresh_card(event_id)
+                try:
+                    self.card_status[event_id] = await asyncio.to_thread(engine.run, event_id, engine.local_now(), self.venues)
+                except Exception:
+                    logging.exception("recompute failed")
+                    self.card_status[event_id] = {"Venue": "check failed, will retry on the next change"}
+                await self.refresh_card(event_id)
+                if event_id not in self.dirty:
+                    break
+        finally:
+            self.running.discard(event_id)
 
     async def setup_hook(self):
         db.init()
@@ -146,6 +182,7 @@ class PlanBot(discord.Client):
         ev = db.open_event(self.channel_id)
         if ev:  # heal the card after downtime (re-pins it if someone unpinned it)
             await self.refresh_card(ev["id"])
+            self.schedule_recompute(ev["id"])
 
     async def on_message(self, m: discord.Message):
         if m.guild is None:  # DM intake (diet etc.), only for people already in an open plan
@@ -177,6 +214,7 @@ class PlanBot(discord.Client):
             return
         db.apply(event_id, m.author.id, m.author.display_name, p)
         await self.refresh_card(event_id)
+        self.schedule_recompute(event_id)
         pub, priv = plan.echo(p)
         if private:
             await m.reply((pub + "\n" + priv).strip())
@@ -207,7 +245,7 @@ class PlanBot(discord.Client):
         ev = db.con.execute("SELECT * FROM events WHERE id=?", (event_id,)).fetchone()
         try:
             msg = await self.get_channel(ev["channel_id"]).fetch_message(ev["card_message_id"])
-            await msg.edit(embed=plan.render(snap), view=card_view(snap))
+            await msg.edit(embed=plan.render(snap, self.card_status.get(event_id)), view=card_view(snap))
             await ensure_pinned(msg)
         except discord.HTTPException:
             logging.warning("could not refresh card")

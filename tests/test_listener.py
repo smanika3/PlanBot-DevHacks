@@ -65,7 +65,8 @@ def test_aggregate_constraints_have_no_names():
     db.toggle(dinner, 11, "Bo")
     db.apply(eid, 11, "Bo", plan.parse_listen('{"diet": ["gluten-free"], "budget": 1}'))
     snap = db.snapshot(eid)
-    assert snap["constraints"] == {"diet": ["gluten-free", "vegetarian"], "budget": 1, "area": ("Tempe", False)}
+    assert snap["constraints"] == {"diet": ["gluten-free", "vegetarian"], "diet_hard": True, "budget": 1,
+                                   "area": ("Tempe", False)}  # hard if anyone's is; still no names
     needs = [f for f in plan.render(snap).to_dict()["fields"] if f["name"] == "Group needs"][0]["value"]
     assert "Dietary: gluten-free, vegetarian" in needs and "Ann" not in needs and "Bo" not in needs
     segs = {s["kind"]: s["in"] for s in snap["segments"]}

@@ -18,13 +18,20 @@ CREATE TABLE IF NOT EXISTS prefs(
   area TEXT, area_hard INTEGER DEFAULT 0, updated_at REAL);
 CREATE TABLE IF NOT EXISTS avail(
   id INTEGER PRIMARY KEY, event_id INTEGER, person_id INTEGER, kind TEXT, start TEXT, end TEXT);
+CREATE TABLE IF NOT EXISTS options(
+  id INTEGER PRIMARY KEY, segment_id INTEGER, ord INTEGER, start TEXT, end TEXT, venue_id TEXT, venue_name TEXT,
+  address TEXT, source_url TEXT, hours_status TEXT, checked_at TEXT, blocked_by TEXT, unknown_n INTEGER);
+CREATE TABLE IF NOT EXISTS hours_cache(
+  url TEXT, weekday TEXT, open TEXT, close TEXT, checked_at TEXT, PRIMARY KEY(url, weekday));
 """
 con: sqlite3.Connection
 
 
 def init(path=None):
     global con
-    con = sqlite3.connect(path or os.environ.get("DB_PATH", "planbot.db"))
+    # ponytail: one shared connection also used by the engine's worker thread; writes are tiny and idempotent.
+    # Upgrade to a connection per thread if writes ever get large or concurrent.
+    con = sqlite3.connect(path or os.environ.get("DB_PATH", "planbot.db"), check_same_thread=False)
     con.row_factory = sqlite3.Row
     con.executescript(SCHEMA)
 
@@ -65,6 +72,7 @@ def set_segments(event_id, kinds, organizer_id):
     cur = {r["kind"]: r["id"] for r in con.execute("SELECT id, kind FROM segments WHERE event_id=?", (event_id,))}
     for kind, sid in cur.items():
         if kind not in kinds:
+            con.execute("DELETE FROM options WHERE segment_id=?", (sid,))
             con.execute("DELETE FROM participation WHERE segment_id=?", (sid,))
             con.execute("DELETE FROM segments WHERE id=?", (sid,))
     for i, kind in enumerate(kinds):
@@ -99,7 +107,7 @@ def snapshot(event_id) -> dict:
         names = [r["name"] for r in con.execute(
             "SELECT p.name FROM participation q JOIN persons p ON p.id=q.person_id "
             "WHERE q.segment_id=? AND q.status='in' ORDER BY p.name", (s["id"],))]
-        segs.append({"id": s["id"], "kind": s["kind"], "in": names})
+        segs.append({"id": s["id"], "kind": s["kind"], "in": names, "options": options(s["id"])})
     n_in = con.execute(
         "SELECT COUNT(DISTINCT q.person_id) FROM participation q JOIN segments s ON s.id=q.segment_id "
         "WHERE s.event_id=? AND q.status='in'", (event_id,)).fetchone()[0]
@@ -108,7 +116,57 @@ def snapshot(event_id) -> dict:
         con.execute("UPDATE events SET status='planning' WHERE id=?", (event_id,))
         con.commit()
     return {"id": event_id, "proposer_id": ev["proposer_id"], "status": ev["status"], "segments": segs, "planning": planning,
-            "n_in": n_in, "constraints": constraints(event_id)}
+            "n_in": n_in, "constraints": constraints(event_id), "replied": replied(event_id)}
+
+
+def replied(event_id) -> int:
+    """People on the roster who have told us when they are free or busy."""
+    return con.execute(
+        "SELECT COUNT(DISTINCT a.person_id) FROM avail a WHERE a.event_id=? AND a.person_id IN "
+        "(SELECT q.person_id FROM participation q JOIN segments s ON s.id=q.segment_id "
+        "WHERE s.event_id=? AND q.status='in')", (event_id, event_id)).fetchone()[0]
+
+
+def people_for_segment(segment_id) -> dict:
+    """{name: {"free": [(start, end)], "busy": [...]}} for everyone in this segment, as datetimes."""
+    from datetime import datetime
+    event_id = event_of_segment(segment_id)
+    out = {}
+    for p in con.execute("SELECT p.id, p.name FROM participation q JOIN persons p ON p.id=q.person_id "
+                         "WHERE q.segment_id=? AND q.status='in'", (segment_id,)):
+        av = {"free": [], "busy": []}
+        for r in con.execute("SELECT kind,start,end FROM avail WHERE event_id=? AND person_id=?", (event_id, p["id"])):
+            av[r["kind"]].append((datetime.fromisoformat(r["start"]), datetime.fromisoformat(r["end"])))
+        out[p["name"]] = av
+    return out
+
+
+def save_options(segment_id, opts: list):
+    con.execute("DELETE FROM options WHERE segment_id=?", (segment_id,))
+    for i, o in enumerate(opts):
+        con.execute("INSERT INTO options(segment_id,ord,start,end,venue_id,venue_name,address,source_url,hours_status,"
+                    "checked_at,blocked_by,unknown_n) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (segment_id, i, o["start"], o["end"], o["venue_id"], o["venue_name"], o["address"], o["source_url"],
+                     o["hours_status"], o["checked_at"], json.dumps(o["blocked_by"]), o["unknown_n"]))
+    con.commit()
+
+
+def options(segment_id) -> list:
+    rows = con.execute("SELECT * FROM options WHERE segment_id=? ORDER BY ord", (segment_id,)).fetchall()
+    return [{**dict(r), "blocked_by": json.loads(r["blocked_by"])} for r in rows]
+
+
+def get_hours(url, weekday, newer_than):
+    """Cached hours row, or None if absent or older than newer_than. open is NULL when the page stated none."""
+    r = con.execute("SELECT * FROM hours_cache WHERE url=? AND weekday=?", (url, weekday)).fetchone()
+    return r if r and r["checked_at"] >= newer_than.isoformat(timespec="minutes") else None
+
+
+def put_hours(url, weekday, hours, checked_at):
+    o, c = (hours[0].isoformat(timespec="minutes"), hours[1].isoformat(timespec="minutes")) if hours else (None, None)
+    con.execute("INSERT OR REPLACE INTO hours_cache VALUES(?,?,?,?,?)",
+                (url, weekday, o, c, checked_at.isoformat(timespec="minutes")))
+    con.commit()
 
 
 def event_for_person(person_id):
@@ -152,4 +210,5 @@ def constraints(event_id) -> dict:
     diet = sorted({d for r in rows if r["diet"] for d in json.loads(r["diet"])})
     budgets = [r["budget"] for r in rows if r["budget"]]
     areas = [(r["area"], bool(r["area_hard"])) for r in rows if r["area"]]
-    return {"diet": diet, "budget": min(budgets) if budgets else None, "area": areas[-1] if areas else None}
+    return {"diet": diet, "diet_hard": any(r["diet"] and r["diet_hard"] for r in rows),
+            "budget": min(budgets) if budgets else None, "area": areas[-1] if areas else None}
