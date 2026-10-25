@@ -30,6 +30,15 @@ HELP = """**PlanBot** turns "wanna golf this weekend, then dinner?" into a group
 • `/status` links the current plan card · `/cancel` cancels it (organizer only) · `/help` shows this."""
 
 
+async def ensure_pinned(msg: discord.Message):
+    """Re-pin the card if someone unpinned it. Needs the Pin Messages permission."""
+    if not msg.pinned:
+        try:
+            await msg.pin()
+        except discord.HTTPException:
+            logging.warning("could not re-pin card")
+
+
 def card_view(snap: dict) -> discord.ui.View:
     v = discord.ui.View(timeout=None)
     for s in snap["segments"]:
@@ -55,6 +64,7 @@ class SegButton(discord.ui.DynamicItem[discord.ui.Button], template=r"seg:(?P<si
         eid = db.toggle(self.sid, interaction.user.id, interaction.user.display_name)
         snap = db.snapshot(eid)
         await interaction.response.edit_message(embed=plan.render(snap), view=card_view(snap))
+        await ensure_pinned(interaction.message)
 
 
 class PlanBot(discord.Client):
@@ -100,6 +110,9 @@ class PlanBot(discord.Client):
 
     async def on_ready(self):
         logging.info("online as %s", self.user)
+        ev = db.open_event(self.channel_id)
+        if ev:  # heal the card after downtime (re-pins it if someone unpinned it)
+            await self.refresh_card(ev["id"])
 
     async def on_message(self, m: discord.Message):
         if m.guild is None:  # DM intake (diet etc.), only for people already in an open plan
@@ -162,6 +175,7 @@ class PlanBot(discord.Client):
         try:
             msg = await self.get_channel(ev["channel_id"]).fetch_message(ev["card_message_id"])
             await msg.edit(embed=plan.render(snap), view=card_view(snap))
+            await ensure_pinned(msg)
         except discord.HTTPException:
             logging.warning("could not refresh card")
 
